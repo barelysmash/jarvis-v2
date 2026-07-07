@@ -1,0 +1,165 @@
+/* JarvisHud.css — v2.7 fixed-stage + viewport scaling.
+   Strategy: .jhud is a fixed 1180×664 stage. A wrapper (.jhud-viewport) fills
+   the window and applies a uniform scale to .jhud via CSS transform. Everything
+   inside .jhud — SVG content AND HTML overlays — grows or shrinks together. */
+
+.jhud-viewport {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: radial-gradient(ellipse 60% 60% at center,
+    #00141d 0%, #00080f 65%, #000204 100%);
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  user-select: none;
+}
+
+.jhud {
+  position: relative;
+  width: 1180px;
+  height: 664px;
+  flex-shrink: 0;
+  transform-origin: center center;
+  /* The transform is set inline from the React side via useViewportScale.
+     will-change + font-smoothing hints help text crispness at non-integer
+     scale factors (ticker text was visibly fuzzy without these). */
+  will-change: transform;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  color: #4dd0e1;
+  cursor: crosshair;
+}
+
+.jhud svg.jhud-svg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ===== rotation utilities for SVG groups ===== */
+.jhud .rotg { transform-box: fill-box; transform-origin: center; }
+.jhud .r-slow     { animation: jhud-spin 70s linear infinite; }
+.jhud .r-med-cc   { animation: jhud-spin 30s linear infinite reverse; }
+.jhud .r-fast     { animation: jhud-spin 14s linear infinite; }
+.jhud .r-vfast-cc { animation: jhud-spin  9s linear infinite reverse; }
+@keyframes jhud-spin { to { transform: rotate(360deg); } }
+
+/* ===== breathing (gentle scale pulse) ===== */
+.jhud .breathe {
+  transform-box: fill-box; transform-origin: center;
+  animation: jhud-breathe 5s ease-in-out infinite;
+}
+@keyframes jhud-breathe {
+  0%, 100% { transform: scale(1);    }
+  50%      { transform: scale(1.035); }
+}
+
+/* ===== lens dilate (slow irregular) ===== */
+.jhud .dilate {
+  transform-box: fill-box; transform-origin: center;
+  animation: jhud-dilate 9s ease-in-out infinite;
+}
+@keyframes jhud-dilate {
+  0%, 100% { transform: scale(1);    }
+  18%      { transform: scale(0.94); }
+  45%      { transform: scale(1.05); }
+  72%      { transform: scale(0.97); }
+}
+
+/* ===== shutter fire ===== */
+.jhud.firing .dilate { animation: jhud-firepulse 0.9s ease-out 1; }
+@keyframes jhud-firepulse {
+  0%   { transform: scale(1);    }
+  22%  { transform: scale(0.74); }
+  55%  { transform: scale(1.28); }
+  100% { transform: scale(1);    }
+}
+
+/* ===== orbit flash during fire ===== */
+.jhud.firing .orbit-arc { animation: jhud-orbflash 0.9s ease-out 1; }
+@keyframes jhud-orbflash {
+  0%, 100% { filter: brightness(1); }
+  15%      { filter: brightness(2.8)
+              drop-shadow(0 0 6px #b2ebf2)
+              drop-shadow(0 0 14px #4dd0e1); }
+  45%      { filter: brightness(1.6) drop-shadow(0 0 3px #4dd0e1); }
+}
+
+/* ===== HUD text flicker ===== */
+.jhud .flicker { animation: jhud-flick 6s steps(1, end) infinite; }
+@keyframes jhud-flick {
+  0%, 96%, 100% { opacity: 1;    }
+  97%           { opacity: 0.4;  }
+  98%           { opacity: 0.85; }
+  99%           { opacity: 0.55; }
+}
+
+/* ===== scanline ===== */
+.jhud .scanline {
+  position: absolute; inset: 0; pointer-events: none;
+  overflow: hidden; opacity: 0.5;
+}
+.jhud .scanline::after {
+  content: ''; position: absolute; left: -10%; right: -10%; height: 35%;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    rgba(0,229,255,0.04) 45%,
+    rgba(0,229,255,0.13) 50%,
+    rgba(0,229,255,0.04) 55%,
+    transparent 100%);
+  animation: jhud-scan 7s linear infinite;
+}
+@keyframes jhud-scan { from { top: -40%; } to { top: 110%; } }
+
+/* ===== vignette ===== */
+.jhud .vignette {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(ellipse at center,
+    transparent 55%, rgba(0,0,0,0.6) 100%);
+}
+
+/* ===== fire flash overlay ===== */
+.jhud .flash {
+  position: absolute; inset: 0; pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse 22% 35% at center,
+    rgba(224,247,250,0.5), transparent 70%);
+}
+.jhud.firing .flash { animation: jhud-flashpulse 0.9s ease-out 1; }
+@keyframes jhud-flashpulse {
+  0%   { opacity: 0;   }
+  18%  { opacity: 1;   }
+  60%  { opacity: 0.2; }
+  100% { opacity: 0;   }
+}
+
+/* ===== blink (live indicators) ===== */
+.jhud .blink { animation: jhud-blink 1.4s ease-in-out infinite; }
+@keyframes jhud-blink { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ===== ticker scroll ===== */
+.jhud .scroll-wrap {
+  position: absolute; overflow: hidden; pointer-events: none;
+  /* Dedicated compositor layer — keeps the scrolling text from
+     re-rasterizing every frame against the scaled parent. */
+  transform: translateZ(0);
+  mask-image: linear-gradient(90deg,
+    transparent 0, black 30px, black calc(100% - 30px), transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg,
+    transparent 0, black 30px, black calc(100% - 30px), transparent 100%);
+}
+.jhud .scroll-inner {
+  display: inline-flex; white-space: nowrap;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+@keyframes jhud-scroll-left {
+  from { transform: translateX(0);    }
+  to   { transform: translateX(-50%); }
+}

@@ -1,0 +1,10 @@
+[Unit]
+Description=JARVIS Memory Sleep Cycle Timer
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+Unit=jarvis-sleep.service
+
+[Install]
+WantedBy=timers.target

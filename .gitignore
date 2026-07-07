@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# Secrets
+.env
+deploy/.env
+config/google/credentials.json
+config/google/token.json
+
+# Data (persistent state)
+data/chroma/
+data/*.db
+data/sleep_logs/*.json
+data/logs/*.log
+
+# Node / Frontend
+node_modules/
+hud/dist/
+hud/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# ---- infra hardening (added at repo creation) ----
+__pycache__/
+*.pyc
+.env
+*.env
+!.env.template
+data/
+jarvis-data/
+*.db
+*.sqlite
+*.sqlite3
+*.bak.*
+*.log
+
+.env~
+*.env~
+config/google
+config/google/
+*credentials*.json
+*client_secret*.json

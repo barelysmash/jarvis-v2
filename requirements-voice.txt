@@ -1,0 +1,22 @@
+# JARVIS voice pipeline requirements
+# Only install on machines with mic/speakers AND a working PortAudio build environment.
+#
+# Prerequisites:
+#   Linux:   sudo apt-get install portaudio19-dev python3-pyaudio
+#   macOS:   brew install portaudio
+#   Windows: pip install pipwin && pipwin install pyaudio
+#            (or use the prebuilt wheel option below)
+#
+# Then: pip install -r requirements-voice.txt
+
+pvporcupine>=3.0.0
+pyaudio>=0.2.13
+webrtcvad>=2.0.10
+
+# STT - pick one (or all)
+openai-whisper>=20231117    # local Whisper (downloads ~150MB model)
+deepgram-sdk>=3.0.0         # hosted, fastest
+
+# TTS - pick one (or all)
+elevenlabs>=1.0.0           # hosted, best voice quality
+# piper-tts                 # local TTS (uncomment if using offline TTS)

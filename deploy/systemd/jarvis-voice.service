@@ -1,0 +1,24 @@
+[Unit]
+Description=JARVIS Voice Pipeline (wake word + STT + TTS)
+After=jarvis-api.service network-online.target sound.target
+Wants=jarvis-api.service
+Requires=sound.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/jarvis
+EnvironmentFile=%h/jarvis/deploy/.env
+ExecStart=%h/jarvis-venv/bin/python scripts/run_voice.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=append:%h/jarvis-data/logs/voice.log
+StandardError=append:%h/jarvis-data/logs/voice.err.log
+
+# Audio access requires runtime dir for PulseAudio
+Environment="XDG_RUNTIME_DIR=/run/user/%U"
+Environment="PULSE_RUNTIME_PATH=/run/user/%U/pulse"
+
+MemoryMax=1G
+
+[Install]
+WantedBy=default.target

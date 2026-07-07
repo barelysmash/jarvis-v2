@@ -1,0 +1,10 @@
+[Unit]
+Description=JARVIS Morning Briefing Timer
+
+[Timer]
+OnCalendar=Mon..Fri 06:45:00
+Persistent=true
+Unit=jarvis-briefing.service
+
+[Install]
+WantedBy=timers.target

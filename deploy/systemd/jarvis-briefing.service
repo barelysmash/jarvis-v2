@@ -1,0 +1,12 @@
+[Unit]
+Description=JARVIS Morning Briefing
+After=jarvis-api.service
+Requires=jarvis-api.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/jarvis
+EnvironmentFile=%h/jarvis/deploy/.env
+ExecStart=%h/jarvis-venv/bin/python scripts/trigger_briefing.py --no-speak
+StandardOutput=append:%h/jarvis-data/logs/briefing.log
+StandardError=append:%h/jarvis-data/logs/briefing.err.log

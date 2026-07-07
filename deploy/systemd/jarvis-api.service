@@ -1,0 +1,24 @@
+[Unit]
+Description=JARVIS API Server (FastAPI + WebSocket)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/jarvis
+EnvironmentFile=%h/jarvis/deploy/.env
+ExecStart=%h/jarvis-venv/bin/uvicorn server.api:app \
+    --host 127.0.0.1 \
+    --port 8765 \
+    --log-level info
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:%h/jarvis-data/logs/api.log
+StandardError=append:%h/jarvis-data/logs/api.err.log
+
+# Resource limits
+MemoryMax=2G
+CPUQuota=200%
+
+[Install]
+WantedBy=default.target

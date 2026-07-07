@@ -1,0 +1,25 @@
+# JARVIS voice pipeline config
+# Environment variables in ${VAR} syntax are substituted at load time.
+
+# Wake word (Picovoice Porcupine)
+porcupine_key: ${PORCUPINE_ACCESS_KEY}
+wake_words:
+  - jarvis
+custom_wake_word_paths: null
+sensitivity: 0.55
+
+# Listening behavior
+silence_ms: 800
+max_utterance_s: 15
+
+# Speech-to-text
+# Backends: local (Whisper) | openai | deepgram
+stt_backend: local
+stt_api_key: ${DEEPGRAM_API_KEY}
+whisper_size: base
+
+# Text-to-speech
+# Backends: elevenlabs | openai | local
+tts_backend: elevenlabs
+tts_api_key: ${ELEVENLABS_API_KEY}
+voice_id: ${JARVIS_VOICE_ID}
