@@ -3,6 +3,8 @@
 import os
 import asyncio
 import logging
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -526,3 +528,10 @@ async def _news_publisher():
         except Exception as exc:
             logger.warning("News publisher error: %s", exc)
             await asyncio.sleep(60)
+            
+# Serve built HUD. Mounted last so /ws and /api/* match first.
+HUD_DIST = Path(__file__).resolve().parents[1] / "hud" / "dist"
+if HUD_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=str(HUD_DIST), html=True), name="hud")
+else:
+    logger.warning("HUD dist not found at %s — serving API only", HUD_DIST)
