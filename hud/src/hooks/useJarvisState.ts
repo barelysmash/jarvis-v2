@@ -1,3 +1,4 @@
+import { uid } from "../lib/uid";
 import { useEffect, useState } from "react";
 import { WS_URL } from "../lib/ws";
 
@@ -84,7 +85,7 @@ export function useJarvisState(): JarvisState {
                 messages: [
                   ...s.messages,
                   {
-                    id: crypto.randomUUID(),
+                    id: uid(),
                     role: evt.data.role,
                     text: evt.data.text,
                     timestamp: new Date(evt.timestamp).toLocaleTimeString(
@@ -100,7 +101,7 @@ export function useJarvisState(): JarvisState {
                 toolEvents: [
                   ...s.toolEvents,
                   {
-                    id: crypto.randomUUID(),
+                    id: uid(),
                     name: evt.data.name,
                     args: evt.data.args || {},
                     status: evt.data.status,
