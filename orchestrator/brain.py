@@ -45,6 +45,8 @@ class JarvisBrain:
             current_time=now_str,
         )
 
+        self._repair_dangling_tool_use()
+        self._trim_history()
         self.conversation.append({"role": "user", "content": user_input})
 
         for iteration in range(max_iterations):
@@ -77,7 +79,15 @@ class JarvisBrain:
                         logger.info("Tool call: %s(%s)", block.name, block.input)
                         self._emit_tool_event(block.name, block.input, "running")
 
-                        result, is_error = self.tools.execute(block.name, block.input)
+                        try:
+                            result, is_error = self.tools.execute(block.name, block.input)
+                        except Exception as exc:
+                            # A throwing handler must still yield a
+                            # tool_result, or the history ends with an
+                            # orphaned tool_use and poisons every
+                            # subsequent API call.
+                            logger.exception("Tool %s raised", block.name)
+                            result, is_error = f"Tool crashed: {exc}", True
 
                         status = "error" if is_error else "success"
                         self._emit_tool_event(block.name, block.input, status)
@@ -112,6 +122,47 @@ class JarvisBrain:
         self.conversation = []
 
     # ─── Internals ───────────────────────────────────────────
+
+    def _repair_dangling_tool_use(self):
+        """Drop a trailing assistant turn whose tool_use has no tool_result.
+
+        An interrupted tool loop (exception, max_iterations, restart
+        mid-turn) leaves the history ending with an assistant message
+        containing tool_use blocks and no following tool_result message.
+        The API rejects that history on the next call, which poisons
+        every subsequent turn. Repair by dropping the orphan.
+        """
+        if not self.conversation:
+            return
+        last = self.conversation[-1]
+        if last.get("role") != "assistant":
+            return
+        content = last.get("content")
+        blocks = content if isinstance(content, list) else []
+        if any(
+            (isinstance(b, dict) and b.get("type") == "tool_use")
+            or getattr(b, "type", None) == "tool_use"
+            for b in blocks
+        ):
+            self.conversation.pop()
+
+    def _trim_history(self, max_messages: int = 24):
+        """Cap history length, never splitting a tool_use/tool_result pair.
+
+        Trims oldest-first. If the cut would make history start with a
+        user message carrying tool_result blocks (whose tool_use just
+        got trimmed away), advance the cut past it.
+        """
+        if len(self.conversation) <= max_messages:
+            return
+        start = len(self.conversation) - max_messages
+        first = self.conversation[start]
+        content = first.get("content")
+        if first.get("role") == "user" and isinstance(content, list) and any(
+            isinstance(b, dict) and b.get("type") == "tool_result" for b in content
+        ):
+            start += 1
+        self.conversation = self.conversation[start:]
 
     def _emit_tool_event(self, name: str, args: dict, status: str):
         """Fire a tool event to both the in-process bus and the SQLite log."""
