@@ -8,19 +8,6 @@ interface StocksTickerProps {
   items?: TickerItem[];
 }
 
-const FALLBACK: TickerItem[] = [
-  { symbol: 'S&P',  value: '7,383.74',  changePct: -2.64 },
-  { symbol: 'NDX',  value: '25,709.43', changePct: -4.18 },
-  { symbol: 'DJI',  value: '50,866.78', changePct: -1.35 },
-  { symbol: 'BTC',  value: '62,045',    changePct: -2.30 },
-  { symbol: 'VIX',  value: '24.7',      changePct:  18.40 },
-  { symbol: 'RUT',  value: '2,418.50',  changePct: -2.05 },
-  { symbol: '10Y',  value: '4.31%',     changePct:   0.04 },
-  { symbol: 'WTI',  value: '69.12',     changePct:   0.85 },
-  { symbol: 'GOLD', value: '3,182',     changePct:  -0.45 },
-  { symbol: 'ETH',  value: '3,408',     changePct:  -3.10 },
-];
-
 function Chip({ item }: { item: TickerItem }) {
   const down = item.changePct < 0;
   return (
@@ -37,8 +24,20 @@ function Chip({ item }: { item: TickerItem }) {
   );
 }
 
+/** StocksTicker — scrolling market strip. Live-data only: renders a static
+ *  AWAITING FEED chip until the `stocks` widget event arrives. */
 export function StocksTicker({ items }: StocksTickerProps) {
-  const list = items ?? FALLBACK;
+  const list = items;
+  if (!list || list.length === 0) {
+    return (
+      <div className="scroll-wrap left-0 right-0 top-[38px] h-[22px]">
+        <span className="inline-flex items-center px-3 py-[2px] font-mono text-[12px]
+                         text-cyan-400/50 tracking-[0.1em]">
+          MARKET FEED · AWAITING DATA
+        </span>
+      </div>
+    );
+  }
   return (
     <div className="scroll-wrap left-0 right-0 top-[38px] h-[22px]">
       <div
