@@ -19,6 +19,14 @@ from .events import bus, emit_jarvis_speech, emit_state, emit_user_speech
 
 logger = logging.getLogger(__name__)
 
+# Publisher log visibility: uvicorn's --log-level configures uvicorn's loggers
+# only. Without a root handler, every logger.info() in this app is dropped.
+if not logging.getLogger().handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
 # Global instances (populated in lifespan)
 brain: Optional[JarvisBrain] = None
 memory: Optional[MemoryStore] = None
@@ -80,6 +88,7 @@ async def lifespan(app: FastAPI):
     metrics_task = asyncio.create_task(_system_metrics_publisher())
     stocks_task = asyncio.create_task(_stocks_publisher())
     news_task = asyncio.create_task(_news_publisher())
+    weather_task = asyncio.create_task(_weather_publisher())
 
     yield
 
@@ -88,11 +97,17 @@ async def lifespan(app: FastAPI):
     metrics_task.cancel()
     stocks_task.cancel()
     news_task.cancel()
-    for task in (poller_task, metrics_task, stocks_task, news_task):
+    weather_task.cancel()
+    for task in (poller_task, metrics_task, stocks_task, news_task, weather_task):
         try:
             await task
         except asyncio.CancelledError:
             pass
+
+# Last-known widget event per widget name; replayed to new WS clients so
+# fresh connections render real data immediately instead of waiting out
+# each publisher's broadcast cycle (up to 10 min for stocks/news).
+last_widget_events: dict[str, dict] = {}
 
 app = FastAPI(lifespan=lifespan, title="JARVIS API")
 
@@ -121,6 +136,13 @@ async def websocket_endpoint(ws: WebSocket):
         }
     )
 
+    # Replay last-known widget states to the new client so it renders
+    # real data immediately instead of waiting out publisher cycles.
+    for cached in list(last_widget_events.values()):
+        try:
+            await ws.send_json(cached)
+        except Exception:
+            break
     try:
         while True:
             event = await queue.get()
@@ -290,6 +312,7 @@ async def _system_metrics_publisher():
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "data": {"widget": "system", "data": payload},
             }
+            last_widget_events["system"] = event
             for q in list(bus.subscribers):
                 try:
                     q.put_nowait(event)
@@ -389,14 +412,24 @@ async def _stocks_publisher():
             crypto_resp = await asyncio.to_thread(crypto_client.get_crypto_bars, crypto_req)
 
             closes_by_sym: dict[str, list[float]] = {}
+            last_bar_by_sym: dict[str, str] = {}
             for sym in all_stocks:
                 bars = stock_resp.data.get(sym, [])
                 ordered = sorted([(b.timestamp, float(b.close)) for b in bars], key=lambda p: p[0])
                 closes_by_sym[sym] = [c for _, c in ordered]
+                last_bar_by_sym[sym] = ordered[-1][0].date().isoformat() if ordered else "NONE"
             for sym in all_crypto:
                 bars = crypto_resp.data.get(sym, [])
                 ordered = sorted([(b.timestamp, float(b.close)) for b in bars], key=lambda p: p[0])
                 closes_by_sym[sym] = [c for _, c in ordered]
+                last_bar_by_sym[sym] = ordered[-1][0].date().isoformat() if ordered else "NONE"
+
+            diag = []
+            for s in (all_stocks + all_crypto):
+                closes = closes_by_sym.get(s, [])
+                lastc = f"{closes[-1]:.2f}" if closes else "NA"
+                diag.append(f"{s}:{last_bar_by_sym.get(s, '?')} n={len(closes)} last={lastc}")
+            logger.info("stocks diag: %s", "; ".join(diag))
 
             # Scrolling ticker payload
             stocks_payload = []
@@ -438,6 +471,7 @@ async def _stocks_publisher():
                     "timestamp": ts,
                     "data": {"widget": widget_name, "data": payload},
                 }
+                last_widget_events[widget_name] = event
                 for q in list(bus.subscribers):
                     try:
                         q.put_nowait(event)
@@ -512,6 +546,7 @@ async def _news_publisher():
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                     "data": {"widget": "news", "data": items},
                 }
+                last_widget_events["news"] = event
                 for q in list(bus.subscribers):
                     try:
                         q.put_nowait(event)
@@ -529,6 +564,92 @@ async def _news_publisher():
             logger.warning("News publisher error: %s", exc)
             await asyncio.sleep(60)
             
+async def _weather_publisher():
+    """Broadcast current conditions + forecast every 15 min (Open-Meteo, keyless)."""
+    import json
+    import urllib.request
+    from datetime import datetime, timezone
+
+    lat = os.environ.get("JARVIS_WEATHER_LAT", "30.2672")
+    lon = os.environ.get("JARVIS_WEATHER_LON", "-97.7431")
+    label = os.environ.get("JARVIS_WEATHER_LABEL", "Austin")
+    url = (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        "&current=temperature_2m,relative_humidity_2m,is_day,weather_code,"
+        "wind_speed_10m,wind_direction_10m"
+        "&daily=temperature_2m_max,temperature_2m_min,weather_code,"
+        "precipitation_probability_max"
+        "&temperature_unit=fahrenheit&wind_speed_unit=mph"
+        "&timezone=auto&forecast_days=5"
+    )
+
+    WMO = {0: "Clear", 1: "Mostly Clear", 2: "Partly Cloudy", 3: "Overcast",
+           45: "Fog", 48: "Fog", 51: "Drizzle", 53: "Drizzle", 55: "Drizzle",
+           61: "Rain", 63: "Rain", 65: "Heavy Rain", 66: "Freezing Rain",
+           67: "Freezing Rain", 71: "Snow", 73: "Snow", 75: "Heavy Snow",
+           77: "Snow", 80: "Showers", 81: "Showers", 82: "Heavy Showers",
+           85: "Snow Showers", 86: "Snow Showers", 95: "Thunderstorm",
+           96: "Thunderstorm", 99: "Thunderstorm"}
+
+    def _compass(deg: float) -> str:
+        dirs = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+        return dirs[int((deg + 22.5) // 45) % 8]
+
+    logger.info("_weather_publisher started (%s)", label)
+    while True:
+        try:
+            def _fetch():
+                with urllib.request.urlopen(url, timeout=20) as r:
+                    return json.loads(r.read().decode())
+            d = await asyncio.to_thread(_fetch)
+            cur = d["current"]
+            daily = d["daily"]
+            precip = daily.get("precipitation_probability_max") or [None] * 5
+            days = []
+            for i in range(len(daily["time"])):
+                dt = datetime.fromisoformat(daily["time"][i])
+                days.append({
+                    "day": dt.strftime("%a").upper(),
+                    "high": round(daily["temperature_2m_max"][i]),
+                    "low": round(daily["temperature_2m_min"][i]),
+                    "condition": WMO.get(daily["weather_code"][i], "?"),
+                    "precip_pct": precip[i],
+                })
+            payload = {
+                "location": label,
+                "temp": round(cur["temperature_2m"]),
+                "condition": WMO.get(cur["weather_code"], "?"),
+                "humidity": cur["relative_humidity_2m"],
+                "wind_mph": round(cur["wind_speed_10m"]),
+                "wind_dir": _compass(cur["wind_direction_10m"]),
+                "is_day": bool(cur["is_day"]),
+                "high": days[0]["high"] if days else None,
+                "low": days[0]["low"] if days else None,
+                "forecast": days[1:5],
+            }
+            event = {
+                "type": "widget",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {"widget": "weather", "data": payload},
+            }
+            last_widget_events["weather"] = event
+            for q in list(bus.subscribers):
+                try:
+                    q.put_nowait(event)
+                except asyncio.QueueFull:
+                    pass
+            logger.info("Weather broadcast: %s %sF, %d subscribers",
+                        payload["condition"], payload["temp"],
+                        len(bus.subscribers))
+            await asyncio.sleep(900)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("Weather publisher error: %s", exc)
+            await asyncio.sleep(120)
+
+
 # Serve built HUD. Mounted last so /ws and /api/* match first.
 HUD_DIST = Path(__file__).resolve().parents[1] / "hud" / "dist"
 if HUD_DIST.is_dir():
