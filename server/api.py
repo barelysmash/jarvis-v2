@@ -89,6 +89,7 @@ async def lifespan(app: FastAPI):
     stocks_task = asyncio.create_task(_stocks_publisher())
     news_task = asyncio.create_task(_news_publisher())
     weather_task = asyncio.create_task(_weather_publisher())
+    calendar_task = asyncio.create_task(_calendar_publisher())
 
     yield
 
@@ -98,7 +99,8 @@ async def lifespan(app: FastAPI):
     stocks_task.cancel()
     news_task.cancel()
     weather_task.cancel()
-    for task in (poller_task, metrics_task, stocks_task, news_task, weather_task):
+    calendar_task.cancel()
+    for task in (poller_task, metrics_task, stocks_task, news_task, weather_task, calendar_task):
         try:
             await task
         except asyncio.CancelledError:
@@ -648,6 +650,61 @@ async def _weather_publisher():
         except Exception as exc:
             logger.warning("Weather publisher error: %s", exc)
             await asyncio.sleep(120)
+
+
+async def _calendar_publisher():
+    """Broadcast today's schedule every 15 min for the HUD Schedule panel.
+
+    Foundation-layer plumbing per JAM: presents calendar Observations,
+    no reasoning. Reuses the registered calendar tool so OAuth and error
+    normalization stay in one place. Disabled cleanly if the calendar
+    integration isn't configured on this host.
+    """
+    from datetime import datetime, timezone
+
+    await asyncio.sleep(2.0)  # let lifespan finish registration
+    if tools is None or "calendar_list_events" not in tools._tools:
+        logger.info("_calendar_publisher: calendar tool not registered -- disabled")
+        return
+
+    logger.info("_calendar_publisher started")
+    while True:
+        try:
+            result, is_error = await asyncio.to_thread(
+                tools.execute, "calendar_list_events", {"hours_ahead": 24}
+            )
+            if is_error:
+                logger.warning("Calendar publisher: tool error: %s", result)
+                await asyncio.sleep(300)
+                continue
+            events = []
+            for e in (result or [])[:8]:
+                if not isinstance(e, dict):
+                    continue
+                events.append({
+                    "title": e.get("title") or e.get("summary") or "(untitled)",
+                    "human_time": e.get("human_time") or e.get("start") or "",
+                    "location": e.get("location"),
+                })
+            event = {
+                "type": "widget",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {"widget": "schedule", "data": {"events": events}},
+            }
+            last_widget_events["schedule"] = event
+            for q in list(bus.subscribers):
+                try:
+                    q.put_nowait(event)
+                except asyncio.QueueFull:
+                    pass
+            logger.info("Schedule broadcast: %d events, %d subscribers",
+                        len(events), len(bus.subscribers))
+            await asyncio.sleep(900)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("Calendar publisher error: %s", exc)
+            await asyncio.sleep(300)
 
 
 # Serve built HUD. Mounted last so /ws and /api/* match first.

@@ -94,7 +94,7 @@ class JarvisBrain:
 
                         # If this was a calendar list and it succeeded, push to widget
                         if block.name == "calendar_list_events" and not is_error:
-                            self._emit_widget("calendar", result)
+                            self._emit_widget("schedule", {"events": result})
 
                         # Send tool_result back to Claude with the is_error
                         # flag set. With is_error=True Claude will tell the
