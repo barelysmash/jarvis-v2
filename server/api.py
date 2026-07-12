@@ -671,7 +671,7 @@ async def _calendar_publisher():
     while True:
         try:
             result, is_error = await asyncio.to_thread(
-                tools.execute, "calendar_list_events", {"hours_ahead": 24}
+                tools.execute, "calendar_list_events", {"days_ahead": 7}
             )
             if is_error:
                 logger.warning("Calendar publisher: tool error: %s", result)
