@@ -69,6 +69,68 @@ class GoogleCalendar:
 
         return [self._format_event(e) for e in result.get("items", [])]
 
+    # ─── RECURRENCE ───────────────────────────────────────────
+
+    _RRULE_DAYS = {
+        "monday": "MO", "tuesday": "TU", "wednesday": "WE",
+        "thursday": "TH", "friday": "FR", "saturday": "SA", "sunday": "SU",
+        "mon": "MO", "tue": "TU", "tues": "TU", "wed": "WE",
+        "thu": "TH", "thur": "TH", "thurs": "TH", "fri": "FR",
+        "sat": "SA", "sun": "SU",
+    }
+
+    def _build_rrule(self, recurrence: str) -> Optional[str]:
+        """Translate natural language into an RRULE. Raw RRULEs pass through.
+
+        Returns None when the phrase can't be translated — callers should
+        surface that as an error rather than silently creating a one-off.
+        """
+        import re
+
+        text = recurrence.strip()
+        upper = text.upper()
+        if upper.startswith("RRULE:"):
+            return upper
+        if upper.startswith("FREQ="):
+            return f"RRULE:{upper}"
+
+        t = text.lower()
+
+        m = re.search(r"every\s+(\d+)\s+(day|week|month|year)", t)
+        if m:
+            freq = {"day": "DAILY", "week": "WEEKLY",
+                    "month": "MONTHLY", "year": "YEARLY"}[m.group(2)]
+            return f"RRULE:FREQ={freq};INTERVAL={m.group(1)}"
+
+        if "every other week" in t or "biweekly" in t or "fortnight" in t:
+            return "RRULE:FREQ=WEEKLY;INTERVAL=2"
+        if "weekday" in t:
+            return "RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR"
+        if "weekend" in t:
+            return "RRULE:FREQ=WEEKLY;BYDAY=SA,SU"
+
+        if "daily" in t or "every day" in t:
+            return "RRULE:FREQ=DAILY"
+        if "yearly" in t or "annual" in t or "every year" in t:
+            return "RRULE:FREQ=YEARLY"
+        if "monthly" in t or "every month" in t:
+            return "RRULE:FREQ=MONTHLY"
+
+        days = []
+        seen = set()
+        for name, code in self._RRULE_DAYS.items():
+            if re.search(rf"\b{name}\b", t) and code not in seen:
+                seen.add(code)
+                days.append(code)
+        if days:
+            order = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
+            days.sort(key=order.index)
+            return f"RRULE:FREQ=WEEKLY;BYDAY={','.join(days)}"
+
+        if "weekly" in t or "every week" in t:
+            return "RRULE:FREQ=WEEKLY"
+        return None
+
     # ─── CREATE ───────────────────────────────────────────────
 
     def create_event(
@@ -81,8 +143,11 @@ class GoogleCalendar:
         location: Optional[str] = None,
         attendees: Optional[list[str]] = None,
         reminders_minutes: Optional[list[int]] = None,
+        recurrence: Optional[str] = None,
     ) -> dict:
-        """Create a calendar event."""
+        """Create a calendar event. `recurrence` makes it a repeating
+        series: natural language ('weekly on Monday', 'every weekday',
+        'every 2 weeks', 'monthly') or a raw RRULE string."""
         start_dt = self._parse_time(start)
         if not start_dt:
             return {"error": f"Could not parse start time: {start}"}
@@ -120,6 +185,12 @@ class GoogleCalendar:
                     for m in reminders_minutes
                 ],
             }
+
+        if recurrence:
+            rrule = self._build_rrule(recurrence)
+            if not rrule:
+                return {"error": f"Could not parse recurrence: {recurrence}"}
+            event_body["recurrence"] = [rrule]
 
         try:
             created = (

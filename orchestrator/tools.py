@@ -112,7 +112,10 @@ class ToolRegistry:
             name="calendar_create_event",
             description=(
                 "Schedule a new calendar event. Accepts natural language times "
-                "like 'tomorrow at 2pm' or ISO timestamps."
+                "like 'tomorrow at 2pm' or ISO timestamps. For REPEATING "
+                "events, set the recurrence field — ONE call creates the "
+                "whole series. Never create multiple individual events to "
+                "simulate recurrence."
             ),
             schema={
                 "type": "object",
@@ -130,6 +133,16 @@ class ToolRegistry:
                     "reminders_minutes": {
                         "type": "array",
                         "items": {"type": "integer"},
+                    },
+                    "recurrence": {
+                        "type": "string",
+                        "description": (
+                            "Repeat rule for recurring events: 'daily', "
+                            "'weekly on Monday', 'every weekday', "
+                            "'every 2 weeks', 'monthly', 'yearly', or a raw "
+                            "RRULE string. Use this single field for any "
+                            "repeating event."
+                        ),
                     },
                 },
                 "required": ["title", "start"],
