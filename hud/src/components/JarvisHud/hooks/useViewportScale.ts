@@ -6,9 +6,11 @@ export const BASE_H = 664;
 
 function calc(): number {
   if (typeof window === 'undefined') return 1;
+  // 12px vertical slack: at exactly 16:9 the stage otherwise fits to the
+  // pixel, and any rounding or browser-chrome quirk clips the newswire.
   return Math.min(
     window.innerWidth / BASE_W,
-    window.innerHeight / BASE_H,
+    (window.innerHeight - 12) / BASE_H,
   );
 }
 

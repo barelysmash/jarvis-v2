@@ -7,15 +7,6 @@ interface NewsTickerProps {
   items?: NewsItem[];
 }
 
-const FALLBACK: NewsItem[] = [
-  { category: 'MARKETS', headline: 'Nasdaq sheds 4.18% in worst session since April 2025 as megacap tech leads broad selloff' },
-  { category: 'TECH',    headline: 'AI infrastructure capex hits $480B annualized as cloud providers race for compute' },
-  { category: 'CRYPTO',  headline: 'Bitcoin extends 13-day record ETF outflow streak; spot price dips below $62K' },
-  { category: 'WORLD',   headline: 'Japan PM signals readiness to intervene on yen as Nikkei records new all-time high midweek' },
-  { category: 'FED',     headline: 'Powell remarks ambiguous on July cut path; futures price 38% probability' },
-  { category: 'ENERGY',  headline: 'WTI crude steadies near $69 as inventories build offsets Mideast risk premium' },
-];
-
 function NewsNode({ item }: { item: NewsItem }) {
   return (
     <span className="inline-flex items-center gap-2 mr-12 font-mono text-[14px]">
@@ -28,8 +19,10 @@ function NewsNode({ item }: { item: NewsItem }) {
   );
 }
 
+/** NewsTicker (v2.10) — live-data only: renders a static AWAITING chip until
+ *  the `news` widget event arrives (instant on connect via replay cache). */
 export function NewsTicker({ items }: NewsTickerProps) {
-  const list = items ?? FALLBACK;
+  const list = items;
   return (
     <>
       <div className="absolute left-[18px] bottom-[10px] flex items-center gap-2
@@ -39,16 +32,23 @@ export function NewsTicker({ items }: NewsTickerProps) {
         <span className="text-[12px] tracking-[0.18em] text-red-300">LIVE · NEWSWIRE</span>
       </div>
       <div className="scroll-wrap left-[180px] right-[18px] bottom-[10px] h-[20px]">
-        <div
-          className="scroll-inner"
-          style={{ animation: 'jhud-scroll-left 90s linear infinite' }}
-        >
-          {[0, 1].map((copy) => (
-            <span key={copy} className="inline-flex shrink-0">
-              {list.map((it, i) => <NewsNode key={`${copy}-${i}`} item={it}/>)}
-            </span>
-          ))}
-        </div>
+        {!list || list.length === 0 ? (
+          <span className="inline-flex items-center font-mono text-[12px]
+                           text-cyan-400/50 tracking-[0.1em]">
+            NEWS FEED · AWAITING DATA
+          </span>
+        ) : (
+          <div
+            className="scroll-inner"
+            style={{ animation: 'jhud-scroll-left 90s linear infinite' }}
+          >
+            {[0, 1].map((copy) => (
+              <span key={copy} className="inline-flex shrink-0">
+                {list.map((it, i) => <NewsNode key={`${copy}-${i}`} item={it}/>)}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );

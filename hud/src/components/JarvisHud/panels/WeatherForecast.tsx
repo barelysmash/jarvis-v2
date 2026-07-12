@@ -57,9 +57,9 @@ function Moon({ phase = 0.5 }: { phase?: number }) {
   );
 }
 
-/** WeatherForecast — combined current conditions + 4-day forecast (v2.9).
- *  Live-data only: renders AWAITING DATA until the `weather` widget event
- *  arrives (instant on connect now that the server replays cached state). */
+/** WeatherForecast — combined current conditions + 4-day forecast (v2.10).
+ *  Live-data only. Positioned by the right-column flex container in
+ *  index.tsx, so it can grow without colliding with MarketCharts. */
 export function WeatherForecast({ now, days }: WeatherForecastProps) {
   const w = now;
   const d: ForecastDay[] | null =
@@ -80,7 +80,7 @@ export function WeatherForecast({ now, days }: WeatherForecastProps) {
       : undefined);
 
   return (
-    <div className="absolute right-[18px] top-[64px] w-[260px] pointer-events-none">
+    <div className="w-[260px] pointer-events-none">
       <div className="bg-black/30 backdrop-blur-sm border border-cyan-500/20
                       rounded-sm px-3 py-2.5 font-mono">
         {/* header */}

@@ -36,12 +36,12 @@ function Sparkbars({ bars, down }: { bars: number[]; down: boolean }) {
   );
 }
 
-/** MarketCharts — 5-day mini bars per index. Live-data only: renders
- *  AWAITING FEED until the `markets` widget event arrives. */
+/** MarketCharts — 5-day mini bars per index (v2.10). Live-data only.
+ *  Positioned by the right-column flex container in index.tsx. */
 export function MarketCharts({ data }: MarketChartsProps) {
   const rows = data;
   return (
-    <div className="absolute right-[18px] top-[226px] w-[260px] pointer-events-none">
+    <div className="w-[260px] pointer-events-none">
       <div className="text-[13px] tracking-[0.15em] text-cyan-400 font-mono mb-1.5">
         MARKETS · 5D
       </div>
