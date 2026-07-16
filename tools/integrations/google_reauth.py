@@ -9,7 +9,7 @@ from pathlib import Path
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
-BASE = Path(__file__).resolve().parents[1] / "config" / "google"
+BASE = Path(__file__).resolve().parents[2] / "config" / "google"
 
 flow = InstalledAppFlow.from_client_secrets_file(
     str(BASE / "credentials.json"), SCOPES
