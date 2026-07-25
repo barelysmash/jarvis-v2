@@ -33,6 +33,7 @@ interface ForecastDay {
 interface WeatherForecastProps {
   now?: WeatherNow;
   days?: ForecastDay[];
+  horizontal?: boolean;
 }
 
 function iconFor(condition: string): string {
@@ -60,7 +61,7 @@ function Moon({ phase = 0.5 }: { phase?: number }) {
 /** WeatherForecast — combined current conditions + 4-day forecast (v2.10).
  *  Live-data only. Positioned by the right-column flex container in
  *  index.tsx, so it can grow without colliding with MarketCharts. */
-export function WeatherForecast({ now, days }: WeatherForecastProps) {
+export function WeatherForecast({ now, days, horizontal }: WeatherForecastProps) {
   const w = now;
   const d: ForecastDay[] | null =
     days ??
@@ -78,6 +79,66 @@ export function WeatherForecast({ now, days }: WeatherForecastProps) {
     (w?.wind_mph != null && w?.wind_dir
       ? `${w.wind_dir} ${w.wind_mph} mph`
       : undefined);
+
+  // Horizontal bar variant (v2.14) — top-center placement under the
+  // StocksTicker. Same data, one row: current conditions | 4-day strip.
+  if (horizontal) {
+    return (
+      <div className="w-[560px] pointer-events-none">
+        <div className="bg-black/30 backdrop-blur-sm border border-cyan-500/20
+                        rounded-sm px-3 py-2 font-mono flex items-center gap-3">
+          <div className="flex flex-col leading-tight min-w-[170px]">
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] tracking-[0.15em] text-cyan-400">
+                WEATHER · {(w?.location ?? 'AUSTIN').toUpperCase()}
+              </span>
+              <Moon phase={w?.moonPhase} />
+            </div>
+            {!w ? (
+              <span className="text-[12px] text-cyan-400/50 tracking-[0.1em] py-2">
+                AWAITING DATA
+              </span>
+            ) : (
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[28px] text-cyan-100 font-light leading-none">
+                  {w.temp}°
+                </span>
+                <span className="flex flex-col leading-tight">
+                  <span className="text-[12px] text-cyan-200">{w.condition}</span>
+                  <span className="text-[10px] text-cyan-400/75">
+                    {(w.high != null || w.low != null) && (
+                      <>H {w.high ?? '—'}° · L {w.low ?? '—'}°</>
+                    )}
+                    {w.humidity != null && <> · {w.humidity}%</>}
+                    {windStr && <> · {windStr}</>}
+                  </span>
+                </span>
+              </div>
+            )}
+          </div>
+          {w && d && d.length > 0 && (
+            <div className="flex gap-1 flex-1 border-l border-cyan-500/15 pl-3">
+              {d.map((day) => (
+                <div key={day.label} className="flex-1 text-center leading-tight">
+                  <div className="text-[9px] text-cyan-400/80 tracking-[0.08em]">
+                    {day.label}
+                  </div>
+                  <div className="text-[14px] my-0.5 text-cyan-200
+                                  drop-shadow-[0_0_3px_rgba(128,222,234,0.4)]">
+                    {day.icon}
+                  </div>
+                  <div className="text-[11px] text-cyan-100">
+                    {day.high}°
+                    <span className="text-cyan-300/60 text-[9px]"> {day.low}°</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-[260px] pointer-events-none">

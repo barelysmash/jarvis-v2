@@ -57,11 +57,16 @@ export function JarvisHud() {
         {/* HTML OVERLAY PANELS */}
         <DateTicker />
         <StocksTicker items={j.widgets.stocks} />
-        {/* Right column — weather + markets flow in a flex stack so
-            panel heights can vary without overlapping. */}
+        {/* Weather bar — centered under the ticker, above the iris (v2.14) */}
+        <div className="absolute left-1/2 top-[68px] -translate-x-1/2
+                        pointer-events-none">
+          <WeatherForecast now={j.widgets.weather} days={j.widgets.forecast} horizontal />
+        </div>
+        {/* Right column — markets + swing map flow in a flex stack so
+            panel heights can vary without overlapping (weather moved
+            to the top bar in v2.14). */}
         <div className="absolute right-[18px] top-[64px] flex flex-col gap-3
                         pointer-events-none">
-          <WeatherForecast now={j.widgets.weather} days={j.widgets.forecast} />
           <MarketCharts data={j.widgets.markets} />
           <Heatmap data={j.widgets.heatmap} />
         </div>
