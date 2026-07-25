@@ -90,6 +90,7 @@ async def lifespan(app: FastAPI):
     news_task = asyncio.create_task(_news_publisher())
     weather_task = asyncio.create_task(_weather_publisher())
     calendar_task = asyncio.create_task(_calendar_publisher())
+    heatmap_task = asyncio.create_task(_heatmap_publisher())
 
     yield
 
@@ -100,7 +101,8 @@ async def lifespan(app: FastAPI):
     news_task.cancel()
     weather_task.cancel()
     calendar_task.cancel()
-    for task in (poller_task, metrics_task, stocks_task, news_task, weather_task, calendar_task):
+    heatmap_task.cancel()
+    for task in (poller_task, metrics_task, stocks_task, news_task, weather_task, calendar_task, heatmap_task):
         try:
             await task
         except asyncio.CancelledError:
@@ -489,6 +491,143 @@ async def _stocks_publisher():
             raise
         except Exception as exc:
             logger.warning("Stocks publisher error: %s", exc)
+            await asyncio.sleep(60)
+
+
+async def _heatmap_publisher():
+    """Broadcast the BarelySwingTrade universe as a % change heatmap
+    every 15 min for the HUD SwingMap panel.
+
+    Universe source, in order: the barelyswing API /universe endpoint
+    (same host, live, no drift copy — may not exist until Drop 3) ->
+    exported JSON at $JARVIS_HEATMAP_UNIVERSE. Market caps are static
+    sizing data at $JARVIS_HEATMAP_CAPS, refreshed occasionally from
+    rosencrantz (yfinance is rate-limited from this Azure IP, fine from
+    residential). Symbols without a cap are sized by prior-session
+    dollar volume and flagged capSrc="proxy" so the HUD marks them.
+    """
+    import asyncio
+    import json
+    import os
+    from datetime import datetime, timezone
+
+    api_key = os.environ.get("ALPACA_API_KEY")
+    api_secret = os.environ.get("ALPACA_API_SECRET")
+    if not api_key or not api_secret:
+        logger.warning("Alpaca credentials missing — heatmap publisher disabled")
+        return
+
+    import httpx
+    from alpaca.data.historical import StockHistoricalDataClient
+    from alpaca.data.requests import StockSnapshotRequest
+    from alpaca.data.enums import DataFeed
+
+    stock_client = StockHistoricalDataClient(api_key, api_secret)
+    universe_path = os.path.expanduser(os.environ.get(
+        "JARVIS_HEATMAP_UNIVERSE", "~/jarvis-data/heatmap/universe.json"))
+    caps_path = os.path.expanduser(os.environ.get(
+        "JARVIS_HEATMAP_CAPS", "~/jarvis-data/heatmap/market_caps.json"))
+    bs_base = os.environ.get("BARELYSWING_API", "http://127.0.0.1:8421").rstrip("/")
+    logger.info("_heatmap_publisher started")
+
+    def _load_universe() -> list:
+        # Preferred: live from the barelyswing API (endpoint may not exist yet)
+        try:
+            r = httpx.get(bs_base + "/universe", timeout=5.0)
+            if r.status_code == 200:
+                raw = r.json()
+                rows = raw.get("symbols", raw) if isinstance(raw, dict) else raw
+                norm = []
+                for s in rows:
+                    t = s.get("ticker") or s.get("symbol")
+                    if t:
+                        norm.append({
+                            "ticker": t,
+                            "tier": str(s.get("tier", "?")).split(".")[-1],
+                            "sector": str(s.get("sector", "?")).split(".")[-1].lower(),
+                        })
+                if norm:
+                    return norm
+        except httpx.HTTPError:
+            pass
+        # Fallback: exported file
+        try:
+            with open(universe_path) as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return []
+
+    def _load_caps() -> dict:
+        try:
+            with open(caps_path) as f:
+                return json.load(f).get("caps", {})
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+    while True:
+        try:
+            universe = [u for u in _load_universe()
+                        if u.get("sector") != "regime_only"]
+            if not universe:
+                logger.warning(
+                    "heatmap: no universe (%s/universe and %s both empty) — "
+                    "retrying in 10 min", bs_base, universe_path)
+                await asyncio.sleep(600)
+                continue
+            caps = _load_caps()
+            symbols = sorted({u["ticker"] for u in universe})
+
+            req = StockSnapshotRequest(symbol_or_symbols=symbols,
+                                       feed=DataFeed.IEX)
+            snaps = await asyncio.to_thread(stock_client.get_stock_snapshot, req)
+
+            tiles, missing = [], []
+            for u in universe:
+                sym = u["ticker"]
+                snap = snaps.get(sym)
+                daily = getattr(snap, "daily_bar", None) if snap else None
+                prev = getattr(snap, "previous_daily_bar", None) if snap else None
+                if not daily or not prev or not prev.close:
+                    missing.append(sym)
+                    continue
+                pct = ((float(daily.close) - float(prev.close))
+                       / float(prev.close) * 100.0)
+                cap_entry = caps.get(sym) or {}
+                cap = cap_entry.get("cap")
+                cap_src = "cap"
+                if not cap:
+                    cap = float(prev.close) * float(prev.volume or 0) or 1e8
+                    cap_src = "proxy"
+                tiles.append({
+                    "t": sym,
+                    "tier": u.get("tier", "?"),
+                    "sector": u.get("sector", "?"),
+                    "pct": round(pct, 2),
+                    "cap": cap,
+                    "capSrc": cap_src,
+                })
+            if missing:
+                logger.info("heatmap: no snapshot for %s", ", ".join(missing))
+
+            if tiles:
+                event = {
+                    "type": "widget",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {"widget": "heatmap", "data": {"tiles": tiles}},
+                }
+                last_widget_events["heatmap"] = event
+                for q in list(bus.subscribers):
+                    try:
+                        q.put_nowait(event)
+                    except asyncio.QueueFull:
+                        pass
+                logger.info("Heatmap broadcast: %d tiles, %d subscribers",
+                            len(tiles), len(bus.subscribers))
+            await asyncio.sleep(900)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("Heatmap publisher error: %s", exc)
             await asyncio.sleep(60)
 
 

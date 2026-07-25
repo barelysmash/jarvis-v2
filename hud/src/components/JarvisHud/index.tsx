@@ -10,6 +10,7 @@ import { Chat } from './panels/Chat';
 import { ToolFeedPanel } from './panels/ToolFeedPanel';
 import { WeatherForecast } from './panels/WeatherForecast';
 import { MarketCharts } from './panels/MarketCharts';
+import { Heatmap } from './panels/Heatmap';
 import { StocksTicker } from './panels/StocksTicker';
 import { NewsTicker } from './panels/NewsTicker';
 import { CPURamRings } from './panels/CPURamRings';
@@ -62,6 +63,7 @@ export function JarvisHud() {
                         pointer-events-none">
           <WeatherForecast now={j.widgets.weather} days={j.widgets.forecast} />
           <MarketCharts data={j.widgets.markets} />
+          <Heatmap data={j.widgets.heatmap} />
         </div>
         <Schedule events={j.widgets.schedule?.events ?? null} />
         <ToolFeedPanel events={j.toolEvents} />
