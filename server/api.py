@@ -531,14 +531,27 @@ async def _heatmap_publisher():
     logger.info("_heatmap_publisher started")
 
     def _load_universe() -> list:
-        # Preferred: live from the barelyswing API (endpoint may not exist yet)
+        # Preferred: live from the barelyswing API (no drift copy).
+        # Deployed shape: {"count": N, "counts": {...},
+        #                  "tiers": {"CORE": [{ticker, sector, is_etf, ...}]}}
+        # (tier is the dict key, not a per-row field; regime symbols are
+        # already excluded server-side). Older/other shapes tolerated.
         try:
             r = httpx.get(bs_base + "/universe", timeout=5.0)
             if r.status_code == 200:
                 raw = r.json()
-                rows = raw.get("symbols", raw) if isinstance(raw, dict) else raw
+                if isinstance(raw, dict) and isinstance(raw.get("tiers"), dict):
+                    rows = [dict(s, tier=tier)
+                            for tier, syms in raw["tiers"].items()
+                            for s in syms if isinstance(s, dict)]
+                elif isinstance(raw, dict):
+                    rows = raw.get("symbols", [])
+                else:
+                    rows = raw
                 norm = []
                 for s in rows:
+                    if not isinstance(s, dict):
+                        continue
                     t = s.get("ticker") or s.get("symbol")
                     if t:
                         norm.append({
@@ -548,8 +561,9 @@ async def _heatmap_publisher():
                         })
                 if norm:
                     return norm
-        except httpx.HTTPError:
-            pass
+        except Exception as exc:
+            logger.warning("heatmap: /universe fetch/parse failed (%s) — "
+                           "falling back to %s", exc, universe_path)
         # Fallback: exported file
         try:
             with open(universe_path) as f:
