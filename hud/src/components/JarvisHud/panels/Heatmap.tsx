@@ -105,9 +105,12 @@ function squarify(values: number[], rect: Rect): Rect[] {
   return out;
 }
 
-const MAP_W = 720;
-const MAP_H = 400;
-const TIER_LABEL_H = 13;
+const MAP_W = 1100;
+const MAP_H = 560;
+const TIER_LABEL_H = 14;
+// Area weight: sqrt compresses mega-cap dominance (~700x -> ~26x)
+// so THEME/SPEC tiers and small tickers stay legible.
+const areaW = (cap: number) => Math.sqrt(Math.max(cap, 1));
 
 /** SwingMap (v2.13) — BarelySwingTrade universe % change treemap, sized by
  *  market cap. Collapsed: top movers card in the right column. Click ->
@@ -138,10 +141,11 @@ export function Heatmap({ data }: { data?: HeatmapData }) {
         tier,
         arr: [...arr].sort((a, b) => b.cap - a.cap),
         cap: arr.reduce((s, t) => s + t.cap, 0),
+        w: arr.reduce((s, t) => s + areaW(t.cap), 0),
       }))
       .sort((a, b) => b.cap - a.cap);
     const tierRects = squarify(
-      tierList.map((t) => t.cap),
+      tierList.map((t) => t.w),
       { x: 0, y: 0, w: MAP_W, h: MAP_H }
     );
     regions = tierList.map((t, i) => {
@@ -153,7 +157,7 @@ export function Heatmap({ data }: { data?: HeatmapData }) {
         h: Math.max(r.h - TIER_LABEL_H - 1, 1),
       };
       const itemRects = squarify(
-        t.arr.map((x) => x.cap),
+        t.arr.map((x) => areaW(x.cap)),
         inner
       );
       return {
@@ -235,7 +239,7 @@ export function Heatmap({ data }: { data?: HeatmapData }) {
           >
             <div className="flex justify-between font-mono mb-1">
               <span className="text-[12px] tracking-[0.15em] text-cyan-400">
-                BARELYSWINGTRADE · UNIVERSE · 1D · SIZED BY MKT CAP
+                BARELYSWINGTRADE · UNIVERSE · 1D · AREA ∝ √MKT CAP
               </span>
               <span
                 className="text-[12px] text-cyan-400/70 cursor-pointer px-1"
@@ -262,7 +266,7 @@ export function Heatmap({ data }: { data?: HeatmapData }) {
                       height: TIER_LABEL_H - 2,
                     }}
                   >
-                    {reg.tier}
+                    {reg.tier} · {reg.items.length}
                   </div>
                   {reg.items.map(({ tile, rect }) => {
                     const showSym = rect.w >= 34 && rect.h >= 15;
