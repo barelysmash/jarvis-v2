@@ -28,7 +28,7 @@ export function Lens({ bladeFireRef, audioLevel = 0 }: LensProps) {
   // 1.0 + 0..0.12 multiplier on the dilate keyframe.
   const audioScale = 1 + audioLevel * 0.12;
   return (
-    <>
+    <g className="jhud-lens">
       <defs>
         {/* turbulence + displacement filters drive the "amorphous" feel */}
         <filter id="jhud-amorphous" x="-30%" y="-30%" width="160%" height="160%">
@@ -255,7 +255,7 @@ export function Lens({ bladeFireRef, audioLevel = 0 }: LensProps) {
         <line x1={0}    y1={218}  x2={0}    y2={205}/>
         <line x1={-218} y1={0}    x2={-205} y2={0}/>
       </g>
-    </>
+    </g>
   );
 }
 

@@ -1,5 +1,6 @@
 import { useShutter } from './hooks/useShutter';
 import { useViewportScale } from './hooks/useViewportScale';
+import { useLensState } from './hooks/useLensState';
 import { useJarvisState } from '../../hooks/useJarvisState';
 import { Lens } from './Lens';
 import { DateClock } from './panels/DateClock';
@@ -32,6 +33,7 @@ export function JarvisHud() {
   const { firing, fire, bladeFireRef } = useShutter();
   const scale = useViewportScale();
   const j = useJarvisState();
+  const lens = useLensState(j);
 
   return (
     <div className="jhud-viewport">
@@ -39,6 +41,7 @@ export function JarvisHud() {
         className={`jhud ${firing ? 'firing' : ''}`}
         onClick={fire}
         data-version={JARVIS_VERSION}
+        data-lens={lens}
         style={{ transform: `scale(${scale})` }}
       >
         {/* MAIN SVG — lens centerpiece + SVG-based panels */}

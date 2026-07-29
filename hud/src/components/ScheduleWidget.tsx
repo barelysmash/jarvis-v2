@@ -16,7 +16,7 @@ export function ScheduleWidget({ events }: ScheduleWidgetProps) {
           SCHEDULE
         </div>
       </div>
-      <div className="p-4 text-xs font-mono">
+      <div className="p-4 text-xs font-mono max-h-[186px] overflow-y-auto">
         {!events || !Array.isArray(events) || events.length === 0 ? (
           <div className="text-cyan-800 italic">No upcoming events</div>
         ) : (

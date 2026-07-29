@@ -163,3 +163,43 @@
   from { transform: translateX(0);    }
   to   { transform: translateX(-50%); }
 }
+
+/* ===== v2.16 -- lens state tinting =====
+   The iris colour is derived client-side from data already on the bus
+   (see JarvisHud/hooks/useLensState.ts) and surfaced as data-lens on .jhud.
+
+   A hue rotation is used instead of recolouring the ~40 hardcoded stops in
+   Lens.tsx: it shifts every chromatic element coherently while leaving the
+   white speculars and the black barrel untouched, and `filter` interpolates
+   smoothly so transitions crossfade rather than snap.
+
+   TO REVERT the colouring entirely, delete this block. Lens.tsx keeps its
+   wrapper <g> harmlessly. */
+
+.jhud .jhud-lens {
+  filter: hue-rotate(var(--lens-hue, 0deg))
+          saturate(var(--lens-sat, 1))
+          brightness(var(--lens-bri, 1));
+  transition: filter 320ms linear;
+}
+
+/* Spin rate scales with state. Larger multiplier = slower. */
+.jhud .jhud-lens .r-slow     { animation-duration: calc(70s * var(--lens-spin, 1)); }
+.jhud .jhud-lens .r-med-cc   { animation-duration: calc(30s * var(--lens-spin, 1)); }
+.jhud .jhud-lens .r-fast     { animation-duration: calc(14s * var(--lens-spin, 1)); }
+.jhud .jhud-lens .r-vfast-cc { animation-duration: calc( 9s * var(--lens-spin, 1)); }
+
+/* Base cyan (#00e5ff) sits at ~186deg; offsets below are relative to that.
+     thinking -> violet ~265    tool     -> green ~150
+     speaking -> amber  ~40     error    -> red   ~0                        */
+.jhud[data-lens="idle"]     { --lens-hue:    0deg; --lens-spin: 1;    }
+.jhud[data-lens="thinking"] { --lens-hue:   78deg; --lens-spin: 0.55; }
+.jhud[data-lens="tool"]     { --lens-hue:  -37deg; --lens-spin: 0.70; }
+.jhud[data-lens="speaking"] { --lens-hue:  213deg; --lens-spin: 0.85; --lens-bri: 1.10; }
+.jhud[data-lens="error"]    { --lens-hue:  173deg; --lens-spin: 1.30; --lens-sat: 1.60; }
+.jhud[data-lens="offline"]  { --lens-hue:    0deg; --lens-spin: 4;    --lens-sat: 0.12; --lens-bri: 0.55; }
+
+@media (prefers-reduced-motion: reduce) {
+  .jhud .jhud-lens { transition: none; }
+}
+
