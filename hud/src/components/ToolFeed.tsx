@@ -45,7 +45,10 @@ export function ToolFeed({ events }: { events: ToolEvent[] }) {
   }, [lastId]);
 
   const expanded = pinned || fresh;
-  const running = events.filter((e) => e.status === "running").length;
+  // Running rows are never reconciled — a tool appends `running` and then a
+  // separate terminal row — so counting the whole buffer over-reports. Only
+  // the newest event says whether anything is actually in flight.
+  const running = last?.status === "running";
 
   const toggle = (e: ReactMouseEvent) => {
     // The .jhud root carries an onClick that fires the shutter animation.
@@ -75,7 +78,7 @@ export function ToolFeed({ events }: { events: ToolEvent[] }) {
           TOOL ACTIVITY
         </span>
         <span className="text-cyan-700 text-[10px] font-mono truncate max-w-[130px]">
-          {running > 0 ? `${running} ACTIVE` : last ? last.name : "IDLE"}
+          {running ? `${last!.name} …` : last ? last.name : "IDLE"}
         </span>
       </button>
 
