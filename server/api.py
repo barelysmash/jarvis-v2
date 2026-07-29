@@ -72,6 +72,16 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         print(f"[server] BarelySwing registration failed: {exc}")
 
+    # Register Friday production analysis tools when configured.
+    if os.environ.get("FRIDAY_API_TOKEN"):
+        try:
+            from tools.integrations.friday import FridayAdapter
+
+            FridayAdapter().register(tools)
+            print("[server] Friday production tools loaded")
+        except Exception as exc:
+            print(f"[server] Friday registration failed: {exc}")
+
     brain = JarvisBrain(
         api_key=api_key,
         user_name=os.environ.get("JARVIS_USER_NAME", "Sir"),
