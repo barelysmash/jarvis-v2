@@ -1,0 +1,16 @@
+schema_version: '1.0'
+repository:
+  name: JARVIS
+  type: orchestrator
+  role: Orchestrates user intent across BarelySmash agents and tools; owns interaction,
+    delegation, synthesis, and presentation, not domain decisions.
+jam:
+  manual_version: 1.3.0
+  conformance_version: '1.0'
+scaffold:
+  template: python-engine
+  version: 1.0.0
+python:
+  layout: single-package
+  package: orchestrator
+  packages: []

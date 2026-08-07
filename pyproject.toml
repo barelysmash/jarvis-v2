@@ -1,0 +1,198 @@
+[project]
+name = "jarvis-v2"
+version = "0.1.0"
+description = "Personal AI orchestration and delegation layer for BarelySmash."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+
+# Legacy debt captured during JAM adoption.
+# Remove individual exemptions as the affected file is cleaned up.
+[tool.ruff.lint.per-file-ignores]
+"orchestrator/brain.py" = ["B007", "E501", "I001", "SIM105", "UP045"]
+"orchestrator/event_log.py" = ["F401"]
+"orchestrator/memory/consolidation.py" = ["B905", "UP045"]
+"orchestrator/memory/decay.py" = ["B905", "UP045"]
+"orchestrator/memory/episodic.py" = ["UP045"]
+"orchestrator/memory/maintenance.py" = ["I001"]
+"orchestrator/memory/procedural.py" = ["UP045"]
+"orchestrator/memory/semantic.py" = ["B905", "UP045"]
+"orchestrator/memory/store.py" = ["I001", "UP045"]
+"orchestrator/memory/summarization.py" = ["UP045"]
+"orchestrator/tools.py" = ["E501", "I001", "UP035"]
+"patch_hud_v216.py" = ["E501", "F541"]
+"server/api.py" = ["B905", "E501", "I001", "N806", "SIM105", "UP017", "UP041", "UP045", "W292", "W293"]
+"tools/integrations/barelyswing.py" = ["F841"]
+"tools/integrations/calendar.py" = ["RUF012", "UP045"]
+"tools/integrations/friday.py" = ["I001"]
+"tools/integrations/google_auth.py" = ["UP045"]
+"tools/integrations/google_reauth.py" = ["I001", "W292"]
+"tools/integrations/web_search.py" = ["E501", "UP045"]
+"voice-client/voice_client.py" = ["B023", "E501", "E702", "N806", "SIM105", "SIM108", "SIM117", "UP041"]
+"voice/stt.py" = ["B904", "UP045"]
+"voice/tts.py" = ["SIM105", "UP035", "UP045"]
+"voice/wake_word.py" = ["SIM102", "UP035", "UP045"]
+"workflows/morning_briefing/briefing.py" = ["UP045"]
+"workflows/morning_briefing/collectors.py" = ["B905", "UP045"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+
+# Legacy debt captured during JAM adoption.
+# New modules receive strict mypy with no exemptions.
+
+[[tool.mypy.overrides]]
+module = ["main"]
+disable_error_code = ["import-not-found", "no-untyped-call", "no-untyped-def"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.brain"]
+disable_error_code = ["import-not-found", "no-untyped-call", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.event_log"]
+disable_error_code = ["type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.memory.consolidation"]
+disable_error_code = ["no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.memory.decay"]
+disable_error_code = ["no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.memory.episodic"]
+disable_error_code = ["no-any-return", "no-untyped-call", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.memory.maintenance"]
+disable_error_code = ["assignment", "no-untyped-call", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.memory.procedural"]
+disable_error_code = ["no-any-return", "no-untyped-call", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.memory.semantic"]
+disable_error_code = ["import-not-found", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.memory.store"]
+disable_error_code = ["no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.memory.summarization"]
+disable_error_code = ["no-untyped-call", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.memory.working"]
+disable_error_code = ["no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["orchestrator.tools"]
+disable_error_code = ["no-untyped-call", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["scripts.auth_google"]
+disable_error_code = ["no-untyped-call", "no-untyped-def"]
+
+[[tool.mypy.overrides]]
+module = ["scripts.run_sleep_cycle"]
+disable_error_code = ["import-not-found", "no-untyped-call", "no-untyped-def"]
+
+[[tool.mypy.overrides]]
+module = ["scripts.run_voice"]
+disable_error_code = ["import-not-found", "import-untyped", "no-any-return", "no-untyped-call", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["scripts.trigger_briefing"]
+disable_error_code = ["import-not-found", "no-untyped-call", "no-untyped-def"]
+
+[[tool.mypy.overrides]]
+module = ["server.api"]
+disable_error_code = ["import-not-found", "import-untyped", "no-any-return", "no-untyped-call", "no-untyped-def", "type-arg", "union-attr", "unreachable", "untyped-decorator"]
+
+[[tool.mypy.overrides]]
+module = ["server.events"]
+disable_error_code = ["no-untyped-call", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["tools.integrations.barelyswing"]
+disable_error_code = ["import-not-found", "no-any-return", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["tools.integrations.calendar"]
+disable_error_code = ["arg-type", "import-not-found", "import-untyped", "no-any-return", "no-untyped-def", "type-arg", "union-attr", "var-annotated"]
+
+[[tool.mypy.overrides]]
+module = ["tools.integrations.friday"]
+disable_error_code = ["import-not-found", "no-untyped-def"]
+
+[[tool.mypy.overrides]]
+module = ["tools.integrations.google_auth"]
+disable_error_code = ["import-not-found", "no-untyped-call", "no-untyped-def", "union-attr"]
+
+[[tool.mypy.overrides]]
+module = ["tools.integrations.google_reauth"]
+disable_error_code = ["import-not-found"]
+
+[[tool.mypy.overrides]]
+module = ["tools.integrations.web_search"]
+disable_error_code = ["import-untyped", "no-untyped-def"]
+
+[[tool.mypy.overrides]]
+module = ["voice.pipeline"]
+disable_error_code = ["import-untyped", "no-untyped-call", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["voice.stt"]
+disable_error_code = ["import-not-found", "no-any-return"]
+
+[[tool.mypy.overrides]]
+module = ["voice.tts"]
+disable_error_code = ["import-not-found", "import-untyped", "no-untyped-def", "unreachable"]
+
+[[tool.mypy.overrides]]
+module = ["voice.vad"]
+disable_error_code = ["import-not-found", "no-any-return", "no-untyped-def"]
+
+[[tool.mypy.overrides]]
+module = ["voice.wake_word"]
+disable_error_code = ["attr-defined", "import-not-found", "import-untyped", "no-untyped-call", "no-untyped-def", "type-arg", "unreachable"]
+
+[[tool.mypy.overrides]]
+module = ["voice_client"]
+disable_error_code = ["arg-type", "import-not-found", "no-untyped-call", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["workflows.base"]
+disable_error_code = ["no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["workflows.morning_briefing.analyzer"]
+disable_error_code = ["no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["workflows.morning_briefing.briefing"]
+disable_error_code = ["no-untyped-call", "override", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["workflows.morning_briefing.collectors"]
+disable_error_code = ["no-any-return", "no-untyped-call", "no-untyped-def", "type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["workflows.morning_briefing.composer"]
+disable_error_code = ["no-any-return", "no-untyped-def", "type-arg"]
