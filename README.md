@@ -128,3 +128,9 @@ The system runs as a layered stack:
 - Linux/macOS for voice pipeline (PortAudio)
 - API keys: Anthropic (required), plus optional ElevenLabs, Deepgram,
   Picovoice, Google Cloud
+
+## JAM
+
+> Built with JAM — the JARVIS Architecture Manual.
+
+**Platform role:** Orchestrates user intent across BarelySmash agents and tools; owns interaction, delegation, synthesis, and presentation, not domain decisions.
