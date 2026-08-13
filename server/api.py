@@ -82,6 +82,16 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             print(f"[server] Friday registration failed: {exc}")
 
+    # Register Muse creative intelligence tools when configured.
+    if os.environ.get("MUSE_BASE_URL"):
+        try:
+            from tools.integrations.muse import MuseAdapter
+
+            MuseAdapter().register(tools)
+            print("[server] Muse creative tools loaded")
+        except Exception as exc:
+            print(f"[server] Muse registration failed: {exc}")
+
     brain = JarvisBrain(
         api_key=api_key,
         user_name=os.environ.get("JARVIS_USER_NAME", "Sir"),
