@@ -31,7 +31,7 @@ class MuseAdapterTests(unittest.TestCase):
             client=client,
         )
 
-    def test_registers_two_creative_tools(self):
+    def test_registers_seven_creative_tools(self):
         adapter = self.make_adapter(
             lambda request: httpx.Response(200, json={})
         )
@@ -44,6 +44,11 @@ class MuseAdapterTests(unittest.TestCase):
             {
                 "muse_create_project",
                 "muse_get_project",
+                "muse_create_art_direction",
+                "muse_generate_candidates",
+                "muse_critique_project",
+                "muse_request_revision",
+                "muse_approve_artifact",
             },
         )
 
@@ -154,6 +159,195 @@ class MuseAdapterTests(unittest.TestCase):
             adapter.get_project(
                 "11111111-1111-1111-1111-111111111111"
             )
+
+    def test_phase_two_bodyless_project_actions(self):
+        calls = []
+
+        def handler(request):
+            calls.append(
+                (
+                    request.method,
+                    request.url.path,
+                    request.content,
+                )
+            )
+            return httpx.Response(
+                200,
+                json={
+                    "project": {
+                        "project_id": (
+                            "11111111-1111-1111-1111-111111111111"
+                        ),
+                        "title": "Test",
+                        "source_idea": "test idea",
+                    },
+                    "human_approval_required": True,
+                },
+            )
+
+        adapter = self.make_adapter(handler)
+        project_id = "11111111-1111-1111-1111-111111111111"
+
+        adapter.prepare_art_direction(project_id)
+        adapter.generate_candidates(project_id)
+        adapter.critique_project(project_id)
+        adapter.request_revision(project_id)
+
+        self.assertEqual(
+            calls,
+            [
+                (
+                    "POST",
+                    (
+                        "/v1/projects/"
+                        "11111111-1111-1111-1111-111111111111/"
+                        "art-direction"
+                    ),
+                    b"",
+                ),
+                (
+                    "POST",
+                    (
+                        "/v1/projects/"
+                        "11111111-1111-1111-1111-111111111111/"
+                        "generate"
+                    ),
+                    b"",
+                ),
+                (
+                    "POST",
+                    (
+                        "/v1/projects/"
+                        "11111111-1111-1111-1111-111111111111/"
+                        "critique"
+                    ),
+                    b"",
+                ),
+                (
+                    "POST",
+                    (
+                        "/v1/projects/"
+                        "11111111-1111-1111-1111-111111111111/"
+                        "revision"
+                    ),
+                    b"",
+                ),
+            ],
+        )
+
+    def test_approve_artifact_posts_explicit_artifact_id(self):
+        captured = {}
+
+        def handler(request):
+            captured["method"] = request.method
+            captured["path"] = request.url.path
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "project": {
+                        "project_id": (
+                            "11111111-1111-1111-1111-111111111111"
+                        ),
+                        "title": "Test",
+                        "source_idea": "test idea",
+                        "approval": "approved",
+                    },
+                    "human_approval_required": True,
+                },
+            )
+
+        adapter = self.make_adapter(handler)
+
+        adapter.approve_artifact(
+            project_id="11111111-1111-1111-1111-111111111111",
+            artifact_id="22222222-2222-2222-2222-222222222222",
+        )
+
+        self.assertEqual(captured["method"], "POST")
+        self.assertEqual(
+            captured["path"],
+            (
+                "/v1/projects/"
+                "11111111-1111-1111-1111-111111111111/approve"
+            ),
+        )
+        self.assertEqual(
+            captured["body"],
+            {
+                "artifact_id": (
+                    "22222222-2222-2222-2222-222222222222"
+                )
+            },
+        )
+
+    def test_structured_critique_conflict_is_sanitized(self):
+        def handler(request):
+            return httpx.Response(
+                409,
+                json={
+                    "detail": {
+                        "code": "operational_constraint_failure",
+                        "artifact_id": (
+                            "22222222-2222-2222-2222-222222222222"
+                        ),
+                        "failures": [
+                            {
+                                "constraint": "transparent_background",
+                                "expected": True,
+                                "actual": False,
+                                "evidence": {
+                                    "alpha_channel": False,
+                                },
+                            },
+                            {
+                                "constraint": "mockup_absent",
+                                "expected": True,
+                                "actual": False,
+                                "evidence": {
+                                    "mockup_detected": True,
+                                },
+                            },
+                        ],
+                    }
+                },
+            )
+
+        adapter = self.make_adapter(handler)
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            (
+                "HTTP 409: operational_constraint_failure "
+                "artifact=22222222-2222-2222-2222-222222222222 "
+                "constraints=transparent_background,mockup_absent"
+            ),
+        ):
+            adapter.critique_project(
+                "11111111-1111-1111-1111-111111111111"
+            )
+
+    def test_approval_tool_requires_project_and_artifact_ids(self):
+        adapter = self.make_adapter(
+            lambda request: httpx.Response(200, json={})
+        )
+        registry = RegistryStub()
+
+        adapter.register(registry)
+
+        approval = registry.tools["muse_approve_artifact"]
+
+        self.assertEqual(
+            approval["schema"]["required"],
+            [
+                "project_id",
+                "artifact_id",
+            ],
+        )
+        self.assertIn(
+            "ONLY when the user has explicitly approved",
+            approval["description"],
+        )
 
 
 if __name__ == "__main__":
