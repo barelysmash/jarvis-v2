@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useShutter } from './hooks/useShutter';
 import { useViewportScale } from './hooks/useViewportScale';
 import { useLensState } from './hooks/useLensState';
@@ -21,6 +22,7 @@ import { Scanline } from './effects/Scanline';
 import { Vignette } from './effects/Vignette';
 import { Flash } from './effects/Flash';
 import { JARVIS_VERSION } from './version';
+import type { MuseReviewContext } from '../../lib/museReview';
 import './JarvisHud.css';
 
 /**
@@ -35,6 +37,33 @@ export function JarvisHud() {
   const scale = useViewportScale();
   const j = useJarvisState();
   const lens = useLensState(j);
+  const museReview = j.widgets.muse_review;
+  const [museReviewContext, setMuseReviewContext] =
+    useState<MuseReviewContext | null>(null);
+
+  useEffect(() => {
+    setMuseReviewContext((current) => {
+      if (!current) {
+        return null;
+      }
+
+      if (
+        !museReview?.project_id ||
+        current.project_id !== museReview.project_id
+      ) {
+        return null;
+      }
+
+      const artifactStillPresent =
+        Array.isArray(museReview?.artifacts) &&
+        museReview.artifacts.some(
+          (artifact: { artifact_id?: string }) =>
+            artifact.artifact_id === current.artifact_id,
+        );
+
+      return artifactStillPresent ? current : null;
+    });
+  }, [museReview]);
 
   return (
     <div className="jhud-viewport">
@@ -76,9 +105,27 @@ export function JarvisHud() {
         </div>
         <Schedule events={j.widgets.schedule?.events ?? null} />
         <ToolFeedPanel events={j.toolEvents} />
-        <Chat messages={j.messages} />
+        <Chat
+          messages={j.messages}
+          museReviewContext={museReviewContext}
+          onMessageSent={() => setMuseReviewContext(null)}
+        />
         <NewsTicker items={j.widgets.news} />
-        <MuseReview data={j.widgets.muse_review} />
+        <MuseReview
+          data={museReview}
+          selectedArtifactId={museReviewContext?.artifact_id}
+          onSelectionChange={(artifactId) => {
+            if (!artifactId || !museReview?.project_id) {
+              setMuseReviewContext(null);
+              return;
+            }
+
+            setMuseReviewContext({
+              project_id: museReview.project_id,
+              artifact_id: artifactId,
+            });
+          }}
+        />
 
         {/* EFFECTS LAYER */}
         <Scanline />
