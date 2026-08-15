@@ -33,6 +33,76 @@ class ToolRegistryLike(Protocol):
     ) -> None: ...
 
 
+def build_review_widget(result: object) -> JsonObject | None:
+    """Return browser-safe Muse review state from a tool result."""
+
+    if not isinstance(result, dict):
+        return None
+
+    wrapped_project = result.get("project")
+
+    if isinstance(wrapped_project, dict):
+        project = wrapped_project
+    elif isinstance(result.get("project_id"), str):
+        project = result
+    else:
+        return None
+
+    project_id = project.get("project_id")
+
+    if not isinstance(project_id, str):
+        return None
+
+    artifacts: list[JsonObject] = []
+    raw_artifacts = project.get("artifacts")
+
+    if isinstance(raw_artifacts, list):
+        for raw in raw_artifacts:
+            if not isinstance(raw, dict):
+                continue
+
+            artifact_id = raw.get("artifact_id")
+            candidate_index = raw.get("candidate_index")
+            mime_type = raw.get("mime_type")
+            width = raw.get("width")
+            height = raw.get("height")
+
+            if not isinstance(artifact_id, str):
+                continue
+            if not isinstance(candidate_index, int):
+                continue
+            if not isinstance(mime_type, str):
+                continue
+            if not isinstance(width, int):
+                continue
+            if not isinstance(height, int):
+                continue
+
+            artifacts.append(
+                {
+                    "artifact_id": artifact_id,
+                    "candidate_index": candidate_index,
+                    "mime_type": mime_type,
+                    "width": width,
+                    "height": height,
+                }
+            )
+
+    return {
+        "project_id": project_id,
+        "title": project.get("title"),
+        "status": project.get("status"),
+        "approval": project.get("approval"),
+        "recommended_artifact_id": project.get(
+            "recommended_artifact_id"
+        ),
+        "approved_artifact_id": project.get(
+            "approved_artifact_id"
+        ),
+        "artifacts": artifacts,
+    }
+
+
 class MuseAdapter:
     """Client for the same-host Muse creative intelligence service."""
 
@@ -270,6 +340,50 @@ class MuseAdapter:
         return self._post_without_body(
             f"/v1/projects/{project}/revision"
         )
+
+    def get_artifact_content(
+        self,
+        project_id: str,
+        artifact_id: str,
+    ) -> tuple[bytes, str]:
+        """Fetch one Muse artifact through Muse's HTTP API."""
+
+        project = self._encoded_project_id(project_id)
+        artifact = quote(artifact_id, safe="")
+
+        try:
+            response = self.client.get(
+                (
+                    f"{self.base_url}/v1/projects/{project}/artifacts/"
+                    f"{artifact}/content"
+                ),
+                headers={"Accept": "image/*"},
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            message = self._error_message(exc.response)
+            raise RuntimeError(
+                f"Muse request failed: HTTP {status}: {message}"
+            ) from None
+        except httpx.RequestError as exc:
+            raise RuntimeError(
+                f"Muse production is unreachable: {exc}"
+            ) from None
+
+        media_type = (
+            response.headers.get("content-type", "")
+            .partition(";")[0]
+            .strip()
+            .lower()
+        )
+
+        if not media_type.startswith("image/"):
+            raise RuntimeError(
+                "Muse returned an unexpected artifact content type."
+            )
+
+        return bytes(response.content), media_type
 
     def approve_artifact(
         self,

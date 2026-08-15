@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from orchestrator.brain import JarvisBrain
@@ -132,6 +132,23 @@ async def lifespan(app: FastAPI):
 # fresh connections render real data immediately instead of waiting out
 # each publisher's broadcast cycle (up to 10 min for stocks/news).
 last_widget_events: dict[str, dict] = {}
+
+
+def _cache_widget_event(event: dict) -> None:
+    """Cache the latest state for any named HUD widget."""
+
+    if event.get("type") != "widget":
+        return
+
+    data = event.get("data")
+    if not isinstance(data, dict):
+        return
+
+    widget_name = data.get("widget")
+    if not isinstance(widget_name, str) or not widget_name:
+        return
+
+    last_widget_events[widget_name] = event
 
 app = FastAPI(lifespan=lifespan, title="JARVIS API")
 
@@ -267,6 +284,45 @@ async def memory_recent(facts: int = 5, episodes: int = 5):
 async def health():
     return {"status": "healthy"}
 
+
+@app.get(
+    "/api/muse/projects/{project_id}/artifacts/{artifact_id}/content"
+)
+def muse_artifact_content(
+    project_id: str,
+    artifact_id: str,
+) -> Response:
+    """Proxy Muse artifact bytes without exposing Muse storage."""
+
+    if not os.environ.get("MUSE_BASE_URL"):
+        raise HTTPException(
+            status_code=503,
+            detail="Muse integration is not configured.",
+        )
+
+    from tools.integrations.muse import MuseAdapter
+
+    adapter = MuseAdapter()
+
+    try:
+        content, media_type = adapter.get_artifact_content(
+            project_id,
+            artifact_id,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        ) from exc
+    finally:
+        adapter.close()
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Cache-Control": "no-store"},
+    )
+
 async def _event_log_poller():
     """Poll the SQLite event log and broadcast new entries to WS subscribers."""
     import time
@@ -285,16 +341,20 @@ async def _event_log_poller():
             for evt in new_events:
                 last_ts = max(last_ts, evt["ts"])
 
-                # Only broadcast events that didn't originate in this process
-                # (the brain emits to bus directly already).
-                if evt["source"] == "brain":
-                    continue
-
                 bus_event = {
                     "type": evt["type"],
                     "timestamp": evt["iso"],
                     "data": evt["payload"],
                 }
+
+                # Cache widget state even when the brain already broadcast
+                # it directly. This makes reconnect replay generic.
+                _cache_widget_event(bus_event)
+
+                # Only broadcast events that didn't originate in this process
+                # (the brain emits to bus directly already).
+                if evt["source"] == "brain":
+                    continue
                 for q in list(bus.subscribers):
                     try:
                         q.put_nowait(bus_event)
