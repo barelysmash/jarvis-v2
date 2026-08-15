@@ -96,6 +96,26 @@ class JarvisBrain:
                         if block.name == "calendar_list_events" and not is_error:
                             self._emit_widget("schedule", {"events": result})
 
+                        # Publish browser-safe Muse review state.
+                        tool_name = getattr(block, "name", "")
+                        if (
+                            isinstance(tool_name, str)
+                            and tool_name.startswith("muse_")
+                            and not is_error
+                        ):
+                            try:
+                                from tools.integrations.muse import (
+                                    build_review_widget,
+                                )
+
+                                review = build_review_widget(result)
+                                if review is not None:
+                                    self._emit_widget("muse_review", review)
+                            except Exception:
+                                logger.exception(
+                                    "Muse review widget emission failed"
+                                )
+
                         # Send tool_result back to Claude with the is_error
                         # flag set. With is_error=True Claude will tell the
                         # user the tool failed instead of improvising an

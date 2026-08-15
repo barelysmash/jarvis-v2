@@ -14,6 +14,7 @@ import { MarketCharts } from './panels/MarketCharts';
 import { Heatmap } from './panels/Heatmap';
 import { StocksTicker } from './panels/StocksTicker';
 import { NewsTicker } from './panels/NewsTicker';
+import { MuseReview } from './panels/MuseReview';
 import { CPURamRings } from './panels/CPURamRings';
 import { DiskEnergy } from './panels/DiskEnergy';
 import { Scanline } from './effects/Scanline';
@@ -77,6 +78,7 @@ export function JarvisHud() {
         <ToolFeedPanel events={j.toolEvents} />
         <Chat messages={j.messages} />
         <NewsTicker items={j.widgets.news} />
+        <MuseReview data={j.widgets.muse_review} />
 
         {/* EFFECTS LAYER */}
         <Scanline />
