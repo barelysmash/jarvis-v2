@@ -1,16 +1,23 @@
 import { ConversationLog } from '../../ConversationLog';
 import { TextInput } from '../../TextInput';
 import type { Message } from '../../../hooks/useJarvisState';
+import type { MuseReviewContext } from '../../../lib/museReview';
 
 interface ChatProps {
   messages: Message[];
+  museReviewContext?: MuseReviewContext | null;
+  onMessageSent?: (text: string) => void;
 }
 
 /** Chat panel (v2.10) — expands on hover/focus so long JARVIS responses are
  *  fully readable, overlaying MarketCharts with a solid backdrop while
  *  interacting and collapsing back afterwards. Conversation text is
  *  selectable/copyable (overrides the stage-wide user-select: none). */
-export function Chat({ messages }: ChatProps) {
+export function Chat({
+  messages,
+  museReviewContext,
+  onMessageSent,
+}: ChatProps) {
   return (
     <div className="absolute right-[18px] bottom-[42px] w-[420px] h-[240px]
                     hover:h-[430px] focus-within:h-[430px]
@@ -24,7 +31,7 @@ export function Chat({ messages }: ChatProps) {
       <div className="flex-1 min-h-0 select-text cursor-text">
         <ConversationLog messages={messages} />
       </div>
-      <TextInput />
+      <TextInput museReviewContext={museReviewContext} />
     </div>
   );
 }

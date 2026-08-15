@@ -1,13 +1,19 @@
 import { useState, KeyboardEvent } from "react";
 import { Send, Loader2 } from "lucide-react";
 import { API_BASE } from "../lib/ws";
+import type { MuseReviewContext } from "../lib/museReview";
 
 interface TextInputProps {
+  museReviewContext?: MuseReviewContext | null;
   onMessageSent?: (text: string) => void;
   onResponseReceived?: (text: string) => void;
 }
 
-export function TextInput({ onMessageSent, onResponseReceived }: TextInputProps) {
+export function TextInput({
+  museReviewContext,
+  onMessageSent,
+  onResponseReceived,
+}: TextInputProps) {
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,6 +21,8 @@ export function TextInput({ onMessageSent, onResponseReceived }: TextInputProps)
   const send = async () => {
     const text = value.trim();
     if (!text || busy) return;
+
+    const requestMuseReviewContext = museReviewContext;
 
     setError(null);
     setBusy(true);
@@ -25,7 +33,16 @@ export function TextInput({ onMessageSent, onResponseReceived }: TextInputProps)
       const resp = await fetch(`${API_BASE}/api/text`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({
+          text,
+          ...(museReviewContext
+            ? {
+                context: {
+                  muse_review: museReviewContext,
+                },
+              }
+            : {}),
+        }),
       });
 
       if (!resp.ok) {

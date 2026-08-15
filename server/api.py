@@ -150,6 +150,94 @@ def _cache_widget_event(event: dict) -> None:
 
     last_widget_events[widget_name] = event
 
+
+
+def _validate_muse_review_context(
+    payload: dict,
+) -> dict[str, str] | None:
+    """Verify browser-supplied Muse selection against server-known review state."""
+
+    context = payload.get("context")
+    if context is None:
+        return None
+    if not isinstance(context, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid request context.",
+        )
+
+    supplied = context.get("muse_review")
+    if supplied is None:
+        return None
+    if not isinstance(supplied, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Muse review context.",
+        )
+
+    project_id = supplied.get("project_id")
+    artifact_id = supplied.get("artifact_id")
+    if (
+        not isinstance(project_id, str)
+        or not project_id
+        or not isinstance(artifact_id, str)
+        or not artifact_id
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid Muse review selection.",
+        )
+
+    cached = last_widget_events.get("muse_review")
+    if not isinstance(cached, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Muse review selection is stale.",
+        )
+
+    cached_event_data = cached.get("data")
+    if not isinstance(cached_event_data, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Muse review selection is stale.",
+        )
+
+    review = cached_event_data.get("data")
+    if not isinstance(review, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Muse review selection is stale.",
+        )
+
+    if review.get("project_id") != project_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Muse review project does not match current review.",
+        )
+
+    artifacts = review.get("artifacts")
+    if not isinstance(artifacts, list):
+        raise HTTPException(
+            status_code=400,
+            detail="Muse review selection is stale.",
+        )
+
+    artifact_matches = any(
+        isinstance(artifact, dict)
+        and artifact.get("artifact_id") == artifact_id
+        for artifact in artifacts
+    )
+    if not artifact_matches:
+        raise HTTPException(
+            status_code=400,
+            detail="Muse artifact is not part of the current review.",
+        )
+
+    return {
+        "project_id": project_id,
+        "artifact_id": artifact_id,
+    }
+
 app = FastAPI(lifespan=lifespan, title="JARVIS API")
 
 app.add_middleware(
@@ -200,12 +288,24 @@ async def text_input(payload: dict):
     import asyncio
 
     text = payload.get("text", "")
+
+    muse_review = _validate_muse_review_context(payload)
+    runtime_context = (
+        {"muse_review": muse_review}
+        if muse_review is not None
+        else None
+    )
+
     await emit_user_speech(text)
     await emit_state("thinking")
 
     # Run brain in a thread so we don't block the event loop -
     # this lets emit_tool_event events flow through while the brain runs.
-    response = await asyncio.to_thread(brain.think_and_act, text)
+    response = await asyncio.to_thread(
+        brain.think_and_act,
+        text,
+        runtime_context=runtime_context,
+    )
 
     await emit_state("speaking")
     await emit_jarvis_speech(response)

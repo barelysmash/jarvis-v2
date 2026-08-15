@@ -21,6 +21,8 @@ interface MuseReviewData {
 
 interface MuseReviewProps {
   data?: MuseReviewData | null;
+  selectedArtifactId?: string | null;
+  onSelectionChange?: (artifactId: string | null) => void;
 }
 
 function artifactUrl(projectId: string, artifactId: string): string {
@@ -31,7 +33,11 @@ function artifactUrl(projectId: string, artifactId: string): string {
   );
 }
 
-export function MuseReview({ data }: MuseReviewProps) {
+export function MuseReview({
+  data,
+  selectedArtifactId,
+  onSelectionChange,
+}: MuseReviewProps) {
   const artifacts = data?.artifacts ?? [];
   const preferredId =
     data?.recommended_artifact_id ??
@@ -39,13 +45,13 @@ export function MuseReview({ data }: MuseReviewProps) {
     artifacts[0]?.artifact_id ??
     '';
 
-  const [selectedId, setSelectedId] = useState(preferredId);
   const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    setSelectedId(preferredId);
     setDismissed(false);
   }, [data?.project_id, preferredId]);
+
+  const selectedId = selectedArtifactId || preferredId;
 
   if (!data || dismissed || artifacts.length === 0) {
     return null;
@@ -54,6 +60,12 @@ export function MuseReview({ data }: MuseReviewProps) {
   const selected =
     artifacts.find((artifact) => artifact.artifact_id === selectedId) ??
     artifacts[0];
+
+  const hasReferencedSelection =
+    !!selectedArtifactId &&
+    artifacts.some(
+      (artifact) => artifact.artifact_id === selectedArtifactId,
+    );
 
   return (
     <div
@@ -82,7 +94,10 @@ export function MuseReview({ data }: MuseReviewProps) {
         <button
           type="button"
           aria-label="Dismiss Muse review"
-          onClick={() => setDismissed(true)}
+          onClick={() => {
+            setDismissed(true);
+            onSelectionChange?.(null);
+          }}
           className="text-cyan-300/60 hover:text-cyan-100 text-xl leading-none"
         >
           ×
@@ -91,7 +106,9 @@ export function MuseReview({ data }: MuseReviewProps) {
 
       <div className="grid grid-cols-3 gap-3">
         {artifacts.map((artifact) => {
-          const isSelected = artifact.artifact_id === selected.artifact_id;
+          const isSelected =
+            hasReferencedSelection &&
+            artifact.artifact_id === selected.artifact_id;
           const isRecommended =
             artifact.artifact_id === data.recommended_artifact_id;
           const isApproved =
@@ -102,7 +119,7 @@ export function MuseReview({ data }: MuseReviewProps) {
               key={artifact.artifact_id}
               type="button"
               aria-pressed={isSelected}
-              onClick={() => setSelectedId(artifact.artifact_id)}
+              onClick={() => onSelectionChange?.(artifact.artifact_id)}
               className={[
                 'text-left border rounded-sm p-2 transition-all',
                 isSelected
@@ -140,7 +157,9 @@ export function MuseReview({ data }: MuseReviewProps) {
       <div className="mt-4 pt-3 border-t border-cyan-500/20
                       flex justify-between gap-4 text-[10px]">
         <div className="text-cyan-200/80">
-          Selected: Candidate {selected.candidate_index + 1}
+          {hasReferencedSelection
+            ? `Referenced: Candidate ${selected.candidate_index + 1}`
+            : `Viewing: Candidate ${selected.candidate_index + 1} · click to reference`}
         </div>
         <div className="text-cyan-300/45 text-right">
           Selection only · approval requires explicit instruction to JARVIS

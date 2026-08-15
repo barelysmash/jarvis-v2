@@ -34,7 +34,12 @@ class JarvisBrain:
 
     # ─── Public API ──────────────────────────────────────────
 
-    def think_and_act(self, user_input: str, max_iterations: int = 10) -> str:
+    def think_and_act(
+        self,
+        user_input: str,
+        max_iterations: int = 10,
+        runtime_context: Optional[dict] = None,
+    ) -> str:
         """Run the ReAct loop: reason, call tools, observe, repeat until done."""
         context = self.memory.retrieve(user_input, k=5)
         from datetime import datetime
@@ -44,6 +49,26 @@ class JarvisBrain:
             memory_context=context,
             current_time=now_str,
         )
+
+        if runtime_context:
+            muse_review = runtime_context.get("muse_review")
+            if isinstance(muse_review, dict):
+                project_id = muse_review.get("project_id")
+                artifact_id = muse_review.get("artifact_id")
+                if isinstance(project_id, str) and isinstance(artifact_id, str):
+                    system_prompt += (
+                        "\n\n# Ephemeral Runtime Context\n"
+                        "Muse review selection for this turn only:\n"
+                        f"- project_id: {project_id}\n"
+                        f"- artifact_id: {artifact_id}\n"
+                        "This selection is referential context only. "
+                        "Selection itself is NOT approval, revision, generation, "
+                        "or permission to take any Muse action. "
+                        "Only approve the selected artifact when the current "
+                        "user message explicitly approves it. "
+                        "A revision request is project-scoped and should use "
+                        "the selected project_id only."
+                    )
 
         self._repair_dangling_tool_use()
         self._trim_history()
