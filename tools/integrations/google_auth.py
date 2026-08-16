@@ -1,5 +1,6 @@
 """Google OAuth: handles authentication and token refresh."""
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -20,11 +21,29 @@ class GoogleAuth:
 
     def __init__(
         self,
-        credentials_path: str = "config/google/credentials.json",
-        token_path: str = "config/google/token.json",
+        credentials_path: Optional[str] = None,
+        token_path: Optional[str] = None,
     ):
-        self.credentials_path = Path(credentials_path)
-        self.token_path = Path(token_path)
+        configured_credentials_path = (
+            credentials_path
+            if credentials_path is not None
+            else (
+                os.environ.get("GOOGLE_CREDENTIALS_PATH")
+                or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+                or "config/google/credentials.json"
+            )
+        )
+        configured_token_path = (
+            token_path
+            if token_path is not None
+            else (
+                os.environ.get("GOOGLE_TOKEN_PATH")
+                or "config/google/token.json"
+            )
+        )
+
+        self.credentials_path = Path(configured_credentials_path).expanduser()
+        self.token_path = Path(configured_token_path).expanduser()
         self._creds: Optional[Credentials] = None
 
     def get_credentials(self) -> Credentials:
