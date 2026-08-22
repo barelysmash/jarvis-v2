@@ -3,6 +3,8 @@
 import logging
 from typing import Any, Callable, TYPE_CHECKING
 
+from .grounding import ground_tool_result
+
 if TYPE_CHECKING:
     from tools.integrations.calendar import GoogleCalendar
 
@@ -75,6 +77,12 @@ class ToolRegistry:
             and result[0].get("error")
         ):
             return (result, True)
+
+        # Friday is a source-bound analysis service. Give the reasoning model a
+        # provenance contract together with the payload so facts absent from the
+        # service cannot be casually attributed to Friday during synthesis.
+        if name.startswith("friday_"):
+            return (ground_tool_result(name, result), False)
 
         return (result, False)
 
