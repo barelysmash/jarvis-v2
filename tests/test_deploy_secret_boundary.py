@@ -34,6 +34,26 @@ def test_preflight_checks_remote_env_without_nested_shell() -> None:
     assert "sudo -u ${TARGET_USER} -H sh -c 'if [ -f" not in deploy_script
 
 
+def test_deploy_assets_are_pinned_to_lf() -> None:
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+
+    assert "*.sh text eol=lf" in attributes
+    assert "deploy/deploy.config text eol=lf" in attributes
+    assert "*.service text eol=lf" in attributes
+    assert "*.timer text eol=lf" in attributes
+
+
+def test_bastion_stage_normalizes_public_deploy_assets() -> None:
+    deploy_script = (DEPLOY / "deploy.sh").read_text(encoding="utf-8")
+
+    assert "find ${BASTION_STAGING} -type f" in deploy_script
+    assert "-name '*.sh'" in deploy_script
+    assert "-name 'deploy.config'" in deploy_script
+    assert "-name '*.service'" in deploy_script
+    assert "-name '*.timer'" in deploy_script
+    assert "-exec sed -i 's/\\r$//' {} +" in deploy_script
+
+
 def test_remote_install_adopts_legacy_env_before_symlink_swap() -> None:
     installer = (DEPLOY / "remote_install.sh").read_text(encoding="utf-8")
 
