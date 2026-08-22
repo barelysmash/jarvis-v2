@@ -14,6 +14,7 @@ RELEASE_NAME="${1:?Release name required}"
 RELEASE_PATH="${TARGET_RELEASES}/${RELEASE_NAME}"
 CURRENT_LINK="${TARGET_INSTALL}"
 PREVIOUS_LINK="${TARGET_HOME}/jarvis-previous"
+LEGACY_ENV="${CURRENT_LINK}/deploy/.env"
 
 echo "[install] Installing ${RELEASE_NAME} as $(whoami)"
 
@@ -23,6 +24,27 @@ if ! loginctl show-user "$(whoami)" 2>/dev/null | grep -q "Linger=yes"; then
     echo "[install] Services will stop when you log out unless an admin runs:"
     echo "[install]     sudo loginctl enable-linger $(whoami)"
 fi
+
+# ─── Persistent private environment ─────────────────────────────
+# Runtime secrets belong to target-host state, not release artifacts. During
+# the first deploy after this migration, adopt the existing release-local env
+# before changing the current symlink. Subsequent deploys reuse TARGET_ENV.
+mkdir -p "${TARGET_ENV_DIR}"
+chmod 700 "${TARGET_ENV_DIR}"
+
+if [[ ! -f "${TARGET_ENV}" ]]; then
+    if [[ -f "${LEGACY_ENV}" ]]; then
+        echo "[install] Adopting legacy private environment into persistent state"
+        install -m 600 "${LEGACY_ENV}" "${TARGET_ENV}"
+    else
+        echo "[install] ERROR: no private JARVIS environment is available"
+        echo "[install] Expected ${TARGET_ENV} or ${LEGACY_ENV}"
+        exit 1
+    fi
+fi
+
+chmod 600 "${TARGET_ENV}"
+echo "[install] Persistent private environment verified"
 
 # ─── Set up Python venv ─────────────────────────────────────────
 if [[ ! -d "${TARGET_VENV}" ]]; then
