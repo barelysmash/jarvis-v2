@@ -5,7 +5,6 @@ from __future__ import annotations
 import datetime
 import re
 
-
 _FRIDAY_SOURCE_BOUNDARY = (
     "SOURCE BOUNDARY — FRIDAY\n"
     "Treat only facts explicitly present in the Friday payload below as facts "
