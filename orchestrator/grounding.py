@@ -62,15 +62,6 @@ _WEEKDAY_DATE_RE = re.compile(
 )
 
 
-def ground_tool_result(tool_name: str, result: object) -> str:
-    """Wrap source-bound tool output with model-facing provenance constraints."""
-
-    rendered = str(result)
-    if tool_name.startswith("friday_"):
-        return f"{_FRIDAY_SOURCE_BOUNDARY}\nFriday payload:\n{rendered}"
-    return rendered
-
-
 def normalize_near_term_weekdays(
     text: str,
     *,
@@ -143,3 +134,16 @@ def normalize_near_term_weekdays(
         return whole[:relative_start] + expected + whole[relative_end:]
 
     return _WEEKDAY_DATE_RE.sub(replace, text)
+
+
+def ground_tool_result(tool_name: str, result: object) -> str:
+    """Wrap source-bound tool output with provenance and calendar constraints."""
+
+    rendered = str(result)
+    if tool_name.startswith("friday_"):
+        rendered = normalize_near_term_weekdays(
+            rendered,
+            reference=date.today(),
+        )
+        return f"{_FRIDAY_SOURCE_BOUNDARY}\nFriday payload:\n{rendered}"
+    return rendered
