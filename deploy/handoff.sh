@@ -19,14 +19,13 @@ RELEASE_PATH="${TARGET_RELEASES}/${RELEASE_NAME}"
 
 echo "[handoff] Shipping ${RELEASE_NAME} from bastion to ${TARGET_HOST}"
 
-# ─── Step 1: Ship files to guildenstern as barelysmash ──────────
+# ─── Step 1: Ship public deploy artifacts to Guildenstern ───────
 ssh "${TARGET_HOST}" "mkdir -p ${GUILD_STAGING}"
 
 scp "${TARBALL}" \
     "${SCRIPT_DIR}/remote_install.sh" \
     "${SCRIPT_DIR}/rollback.sh" \
     "${SCRIPT_DIR}/deploy.config" \
-    "${SCRIPT_DIR}/.env" \
     "${TARGET_HOST}:${GUILD_STAGING}/"
 
 scp -r "${SCRIPT_DIR}/systemd" "${TARGET_HOST}:${GUILD_STAGING}/"
@@ -46,9 +45,9 @@ sudo mkdir -p "${RELEASE_PATH}"
 sudo tar -xzf "${GUILD_STAGING}/${RELEASE_NAME}.tar.gz" \
     -C "${RELEASE_PATH}" --strip-components=1
 
-# Copy deploy artifacts into the release
+# Copy public deploy artifacts into the release. Private runtime configuration
+# remains on Guildenstern outside release directories and is never staged here.
 sudo cp -r "${GUILD_STAGING}/systemd" "${RELEASE_PATH}/deploy/"
-sudo cp "${GUILD_STAGING}/.env" "${RELEASE_PATH}/deploy/.env"
 sudo cp "${GUILD_STAGING}/deploy.config" "${RELEASE_PATH}/deploy/"
 sudo cp "${GUILD_STAGING}/remote_install.sh" "${RELEASE_PATH}/deploy/"
 sudo cp "${GUILD_STAGING}/rollback.sh" "${RELEASE_PATH}/deploy/"
@@ -57,7 +56,6 @@ sudo chmod +x "${RELEASE_PATH}/deploy/rollback.sh"
 
 # Hand ownership to ocelia (the critical step)
 sudo chown -R ${TARGET_USER}:${TARGET_USER} "${RELEASE_PATH}"
-sudo chmod 600 "${RELEASE_PATH}/deploy/.env"
 
 echo "[guild] Release extracted and owned by ${TARGET_USER}"
 
