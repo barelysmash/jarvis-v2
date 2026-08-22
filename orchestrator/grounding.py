@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
 import re
+from datetime import date, datetime
 
 
 _FRIDAY_SOURCE_BOUNDARY = (
