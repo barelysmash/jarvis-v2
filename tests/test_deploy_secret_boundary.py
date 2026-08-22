@@ -23,6 +23,17 @@ def test_target_config_declares_persistent_private_env() -> None:
     assert 'TARGET_ENV="${TARGET_ENV_DIR}/jarvis.env"' in config
 
 
+def test_preflight_checks_remote_env_without_nested_shell() -> None:
+    deploy_script = (DEPLOY / "deploy.sh").read_text(encoding="utf-8")
+
+    assert "sudo -u ${TARGET_USER} -H test -f '${TARGET_ENV}'" in deploy_script
+    assert (
+        "sudo -u ${TARGET_USER} -H test -f "
+        "'${TARGET_INSTALL}/deploy/.env'"
+    ) in deploy_script
+    assert "sudo -u ${TARGET_USER} -H sh -c 'if [ -f" not in deploy_script
+
+
 def test_remote_install_adopts_legacy_env_before_symlink_swap() -> None:
     installer = (DEPLOY / "remote_install.sh").read_text(encoding="utf-8")
 

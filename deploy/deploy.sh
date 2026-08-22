@@ -62,24 +62,19 @@ preflight() {
     # Private runtime configuration belongs to the target host. During the
     # first deploy after this migration, remote_install.sh adopts the legacy
     # release-local env into persistent target state before changing symlinks.
-    local env_state
-    env_state=$(
-        ssh "${BASTION_HOST}" \
-            "ssh ${TARGET_HOST} sudo -u ${TARGET_USER} -H sh -c 'if [ -f \"${TARGET_ENV}\" ]; then echo persistent; elif [ -f \"${TARGET_INSTALL}/deploy/.env\" ]; then echo legacy; else echo missing; fi'" \
-            2>/dev/null || true
-    )
-
-    case "${env_state}" in
-        persistent)
-            ok "Persistent target environment present"
-            ;;
-        legacy)
-            ok "Legacy target environment present; deploy will adopt it"
-            ;;
-        *)
-            fail "No private JARVIS environment found on ${TARGET_HOST}"
-            ;;
-    esac
+    # Use direct remote test invocations here: nesting an additional `sh -c`
+    # introduces a second shell-parsing layer and can corrupt the condition.
+    if ssh "${BASTION_HOST}" \
+            "ssh ${TARGET_HOST} sudo -u ${TARGET_USER} -H test -f '${TARGET_ENV}'" \
+            &>/dev/null; then
+        ok "Persistent target environment present"
+    elif ssh "${BASTION_HOST}" \
+            "ssh ${TARGET_HOST} sudo -u ${TARGET_USER} -H test -f '${TARGET_INSTALL}/deploy/.env'" \
+            &>/dev/null; then
+        ok "Legacy target environment present; deploy will adopt it"
+    else
+        fail "No private JARVIS environment found on ${TARGET_HOST}"
+    fi
 }
 
 # ─── Build the release tarball ──────────────────────────────────
