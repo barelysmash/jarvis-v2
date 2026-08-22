@@ -59,11 +59,27 @@ preflight() {
         ok "Passwordless sudo confirmed on ${TARGET_HOST}"
     fi
 
-    # Check env file exists
-    if [[ ! -f "${SCRIPT_DIR}/.env" ]]; then
-        fail ".env not found at ${SCRIPT_DIR}/.env (copy from env.template)"
-    fi
-    ok "Environment file present"
+    # Private runtime configuration belongs to the target host. During the
+    # first deploy after this migration, remote_install.sh adopts the legacy
+    # release-local env into persistent target state before changing symlinks.
+    local env_state
+    env_state=$(
+        ssh "${BASTION_HOST}" \
+            "ssh ${TARGET_HOST} sudo -u ${TARGET_USER} -H sh -c 'if [ -f \"${TARGET_ENV}\" ]; then echo persistent; elif [ -f \"${TARGET_INSTALL}/deploy/.env\" ]; then echo legacy; else echo missing; fi'" \
+            2>/dev/null || true
+    )
+
+    case "${env_state}" in
+        persistent)
+            ok "Persistent target environment present"
+            ;;
+        legacy)
+            ok "Legacy target environment present; deploy will adopt it"
+            ;;
+        *)
+            fail "No private JARVIS environment found on ${TARGET_HOST}"
+            ;;
+    esac
 }
 
 # ─── Build the release tarball ──────────────────────────────────
@@ -110,7 +126,6 @@ ship_to_bastion() {
         "${SCRIPT_DIR}/remote_install.sh" \
         "${SCRIPT_DIR}/rollback.sh" \
         "${SCRIPT_DIR}/deploy.config" \
-        "${SCRIPT_DIR}/.env" \
         "${BASTION_HOST}:${BASTION_STAGING}/"
 
     scp -q -r "${SCRIPT_DIR}/systemd" "${BASTION_HOST}:${BASTION_STAGING}/"

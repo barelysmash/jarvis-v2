@@ -7,7 +7,7 @@ Requires=sound.target
 [Service]
 Type=simple
 WorkingDirectory=%h/jarvis
-EnvironmentFile=%h/jarvis/deploy/.env
+EnvironmentFile=%h/jarvis-data/env/jarvis.env
 ExecStart=%h/jarvis-venv/bin/python scripts/run_voice.py
 Restart=on-failure
 RestartSec=10
