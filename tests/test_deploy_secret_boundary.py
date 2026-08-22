@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 DEPLOY = ROOT / "deploy"
 PERSISTENT_ENV = "%h/jarvis-data/env/jarvis.env"
