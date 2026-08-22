@@ -125,7 +125,13 @@ ship_to_bastion() {
 
     scp -q -r "${SCRIPT_DIR}/systemd" "${BASTION_HOST}:${BASTION_STAGING}/"
 
-    ssh "${BASTION_HOST}" "chmod +x ${BASTION_STAGING}/*.sh"
+    # The deploy client commonly runs from a Windows checkout. Normalize only
+    # public deployment artifacts after staging so CRLF can never corrupt a
+    # remote shebang, sourced config value, or systemd unit.
+    ssh "${BASTION_HOST}" "find ${BASTION_STAGING} -type f \
+        \( -name '*.sh' -o -name 'deploy.config' -o -name '*.service' -o -name '*.timer' \) \
+        -exec sed -i 's/\r$//' {} + && chmod +x ${BASTION_STAGING}/*.sh"
+
     ok "Files staged on bastion"
 }
 
