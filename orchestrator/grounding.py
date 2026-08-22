@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-import re
 from datetime import date, datetime
+import re
 
 
-_FRIDAY_SOURCE_BOUNDARY = """SOURCE BOUNDARY — FRIDAY
-Treat only facts explicitly present in the Friday payload below as facts reported by Friday.
-Do not invent or infer catalyst dates, earnings dates, weekday labels, event details, or risk-gate reasons and attribute them to Friday.
-If a requested fact is absent, say that Friday did not provide it. If external information is needed, use another source and label it separately.
-"""
+_FRIDAY_SOURCE_BOUNDARY = (
+    "SOURCE BOUNDARY — FRIDAY\n"
+    "Treat only facts explicitly present in the Friday payload below as facts "
+    "reported by Friday.\n"
+    "Do not invent or infer catalyst dates, earnings dates, weekday labels, "
+    "event details, or risk-gate reasons and attribute them to Friday.\n"
+    "If a requested fact is absent, say that Friday did not provide it. If "
+    "external information is needed, use another source and label it separately.\n"
+)
 
 _MONTHS = {
     "jan": 1,
