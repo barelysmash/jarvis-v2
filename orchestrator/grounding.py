@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
 import re
-from datetime import date, datetime
 
 
 _FRIDAY_SOURCE_BOUNDARY = (
@@ -69,7 +69,7 @@ _WEEKDAY_DATE_RE = re.compile(
 def normalize_near_term_weekdays(
     text: str,
     *,
-    reference: date | datetime,
+    reference: datetime.date | datetime.datetime,
     maximum_implicit_distance_days: int = 183,
 ) -> str:
     """Correct weekday labels attached to explicit or near-term month/day dates.
@@ -81,28 +81,32 @@ def normalize_near_term_weekdays(
     and market dates.
     """
 
-    reference_date = reference.date() if isinstance(reference, datetime) else reference
+    reference_date = (
+        reference.date()
+        if isinstance(reference, datetime.datetime)
+        else reference
+    )
 
     def replace(match: re.Match[str]) -> str:
         month = _MONTHS[match.group("month").lower()]
         day = int(match.group("day"))
         explicit_year = match.group("year")
 
-        target: date | None
+        target: datetime.date | None
         if explicit_year is not None:
             try:
-                target = date(int(explicit_year), month, day)
+                target = datetime.date(int(explicit_year), month, day)
             except ValueError:
                 return match.group(0)
         else:
-            candidates: list[date] = []
+            candidates: list[datetime.date] = []
             for year in (
                 reference_date.year - 1,
                 reference_date.year,
                 reference_date.year + 1,
             ):
                 try:
-                    candidates.append(date(year, month, day))
+                    candidates.append(datetime.date(year, month, day))
                 except ValueError:
                     continue
 
@@ -147,7 +151,7 @@ def ground_tool_result(tool_name: str, result: object) -> str:
     if tool_name.startswith("friday_"):
         rendered = normalize_near_term_weekdays(
             rendered,
-            reference=date.today(),
+            reference=datetime.date.today(),
         )
         return f"{_FRIDAY_SOURCE_BOUNDARY}\nFriday payload:\n{rendered}"
     return rendered
