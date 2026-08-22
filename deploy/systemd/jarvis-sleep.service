@@ -4,7 +4,7 @@ Description=JARVIS Memory Sleep Cycle (decay + summarize)
 [Service]
 Type=oneshot
 WorkingDirectory=%h/jarvis
-EnvironmentFile=%h/jarvis/deploy/.env
+EnvironmentFile=%h/jarvis-data/env/jarvis.env
 ExecStart=%h/jarvis-venv/bin/python scripts/run_sleep_cycle.py nightly
 StandardOutput=append:%h/jarvis-data/logs/sleep.log
 StandardError=append:%h/jarvis-data/logs/sleep.err.log
