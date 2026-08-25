@@ -77,6 +77,25 @@ preflight() {
     fi
 }
 
+# ─── Build the production HUD ──────────────────────────────────
+build_hud() {
+    local hud_dir="${LOCAL_SOURCE}/hud"
+
+    [[ -f "${hud_dir}/package.json" ]] || fail "HUD package.json not found"
+    [[ -f "${hud_dir}/package-lock.json" ]] || fail "HUD package-lock.json not found"
+    command -v npm >/dev/null 2>&1 || fail "npm is required to build the HUD"
+
+    log "Building production HUD..."
+    (
+        cd "${hud_dir}"
+        npm ci --include=dev --prefer-offline --no-audit --no-fund
+        npm run build
+    )
+
+    [[ -s "${hud_dir}/dist/index.html" ]] || fail "HUD build did not produce dist/index.html"
+    ok "Production HUD built"
+}
+
 # ─── Build the release tarball ──────────────────────────────────
 build_release() {
     log "Building release tarball..."
@@ -86,7 +105,6 @@ build_release() {
         --exclude='__pycache__'
         --exclude='*.pyc'
         --exclude='node_modules'
-        --exclude='hud/dist'
         --exclude='hud/.vite'
         --exclude='data/chroma'
         --exclude='data/*.db'
@@ -103,6 +121,10 @@ build_release() {
         "${exclude_args[@]}" \
         -C "$(dirname "${LOCAL_SOURCE}")" \
         "$(basename "${LOCAL_SOURCE}")"
+
+    if ! tar -tzf "${RELEASE_TARBALL}" | grep '/hud/dist/index.html$' >/dev/null; then
+        fail "Release tarball does not contain the built HUD"
+    fi
 
     local size
     size=$(du -h "${RELEASE_TARBALL}" | cut -f1)
@@ -204,6 +226,7 @@ main() {
     case "${command}" in
         deploy)
             preflight
+            build_hud
             build_release
             ship_to_bastion
             run_handoff

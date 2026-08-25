@@ -54,6 +54,42 @@ def test_bastion_stage_normalizes_public_deploy_assets() -> None:
     assert "-exec sed -i 's/\\r$//' {} +" in deploy_script
 
 
+def test_deploy_client_builds_and_packages_the_production_hud() -> None:
+    deploy_script = (DEPLOY / "deploy.sh").read_text(encoding="utf-8")
+
+    assert "build_hud() {" in deploy_script
+    assert "npm ci --include=dev --prefer-offline --no-audit --no-fund" in deploy_script
+    assert "npm run build" in deploy_script
+    assert "--exclude='hud/dist'" not in deploy_script
+    assert "grep '/hud/dist/index.html$'" in deploy_script
+
+    hud_build = deploy_script.index("            build_hud")
+    release_build = deploy_script.index("            build_release")
+    assert hud_build < release_build
+
+
+def test_remote_install_rejects_missing_hud_before_symlink_swap() -> None:
+    installer = (DEPLOY / "remote_install.sh").read_text(encoding="utf-8")
+
+    hud_guard = installer.index('[[ ! -s "${RELEASE_PATH}/hud/dist/index.html" ]]')
+    symlink_swap = installer.index('mv "${CURRENT_LINK}" "${PREVIOUS_LINK}"')
+
+    assert hud_guard < symlink_swap
+    assert "release is missing the built JARVIS HUD" in installer
+
+
+def test_ci_builds_and_verifies_the_production_hud() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "uses: actions/setup-node@v4" in workflow
+    assert "cache-dependency-path: hud/package-lock.json" in workflow
+    assert "run: npm ci --include=dev --no-audit --no-fund" in workflow
+    assert "run: npm run build" in workflow
+    assert "run: test -s dist/index.html" in workflow
+
+
 def test_remote_install_adopts_legacy_env_before_symlink_swap() -> None:
     installer = (DEPLOY / "remote_install.sh").read_text(encoding="utf-8")
 

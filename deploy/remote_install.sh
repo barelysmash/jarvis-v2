@@ -18,6 +18,16 @@ LEGACY_ENV="${CURRENT_LINK}/deploy/.env"
 
 echo "[install] Installing ${RELEASE_NAME} as $(whoami)"
 
+# The HUD is an untracked build artifact, but it is required in every
+# production release. Reject incomplete releases before touching target state
+# or swapping the currently healthy production symlink.
+if [[ ! -s "${RELEASE_PATH}/hud/dist/index.html" ]]; then
+    echo "[install] ERROR: release is missing the built JARVIS HUD" >&2
+    echo "[install] Expected ${RELEASE_PATH}/hud/dist/index.html" >&2
+    exit 1
+fi
+echo "[install] Built HUD verified"
+
 # ─── Linger check (services need this to survive logout) ────────
 if ! loginctl show-user "$(whoami)" 2>/dev/null | grep -q "Linger=yes"; then
     echo "[install] WARNING: linger not enabled for $(whoami)"
