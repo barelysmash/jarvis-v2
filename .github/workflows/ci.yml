@@ -6,6 +6,32 @@ on:
   workflow_dispatch:
 
 jobs:
+  hud:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hud
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: hud/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci --include=dev --no-audit --no-fund
+
+      - name: Build production HUD
+        run: npm run build
+
+      - name: Verify production HUD artifact
+        run: test -s dist/index.html
+
   validate:
     runs-on: ubuntu-latest
 
