@@ -16,6 +16,7 @@ from orchestrator.memory.store import MemoryStore
 from orchestrator.tools import ToolRegistry
 
 from .events import bus, emit_jarvis_speech, emit_state, emit_user_speech
+from server.spotify_client import spotify_client
 
 logger = logging.getLogger(__name__)
 
@@ -1038,6 +1039,31 @@ async def _calendar_publisher():
         except Exception as exc:
             logger.warning("Calendar publisher error: %s", exc)
             await asyncio.sleep(300)
+
+
+@app.get("/api/spotify/now-playing")
+async def spotify_now_playing():
+    return spotify_client.get_now_playing() or {"is_playing": False}
+
+@app.post("/api/spotify/play")
+async def spotify_play():
+    spotify_client.play()
+    return {"ok": True}
+
+@app.post("/api/spotify/pause")
+async def spotify_pause():
+    spotify_client.pause()
+    return {"ok": True}
+
+@app.post("/api/spotify/next")
+async def spotify_next():
+    spotify_client.next_track()
+    return {"ok": True}
+
+@app.post("/api/spotify/previous")
+async def spotify_previous():
+    spotify_client.previous_track()
+    return {"ok": True}
 
 
 # Serve built HUD. Mounted last so /ws and /api/* match first.
