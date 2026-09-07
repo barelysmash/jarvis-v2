@@ -112,6 +112,7 @@ async def lifespan(app: FastAPI):
     weather_task = asyncio.create_task(_weather_publisher())
     calendar_task = asyncio.create_task(_calendar_publisher())
     heatmap_task = asyncio.create_task(_heatmap_publisher())
+    spotify_task = asyncio.create_task(_spotify_publisher())
 
     yield
 
@@ -123,7 +124,8 @@ async def lifespan(app: FastAPI):
     weather_task.cancel()
     calendar_task.cancel()
     heatmap_task.cancel()
-    for task in (poller_task, metrics_task, stocks_task, news_task, weather_task, calendar_task, heatmap_task):
+    spotify_task.cancel()
+    for task in (poller_task, metrics_task, stocks_task, news_task, weather_task, calendar_task, heatmap_task, spotify_task):
         try:
             await task
         except asyncio.CancelledError:
@@ -985,6 +987,34 @@ async def _weather_publisher():
             logger.warning("Weather publisher error: %s", exc)
             await asyncio.sleep(120)
 
+async def _spotify_publisher():
+    """Broadcast Spotify now-playing state every 3s for the HUD miniplayer."""
+    from datetime import datetime, timezone
+
+    last_payload = None
+
+    while True:
+        try:
+            payload = spotify_client.get_now_playing() or {"is_playing": False}
+            if payload != last_payload:
+                event = {
+                    "type": "widget",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "data": {"widget": "spotify", "data": payload},
+                }
+                last_widget_events["spotify"] = event
+                for q in list(bus.subscribers):
+                    try:
+                        q.put_nowait(event)
+                    except asyncio.QueueFull:
+                        pass
+                last_payload = payload
+            await asyncio.sleep(3)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("Spotify publisher error: %s", exc)
+            await asyncio.sleep(30)
 
 async def _calendar_publisher():
     """Broadcast today's schedule every 15 min for the HUD Schedule panel.

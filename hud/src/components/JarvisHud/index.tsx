@@ -8,6 +8,7 @@ import { DateClock } from './panels/DateClock';
 import { DateTicker } from './panels/DateTicker';
 import { Wordmark } from './panels/Wordmark';
 import { Schedule } from './panels/Schedule';
+import { Spotify } from './panels/Spotify';
 import { Chat } from './panels/Chat';
 import { ToolFeedPanel } from './panels/ToolFeedPanel';
 import { WeatherForecast } from './panels/WeatherForecast';
@@ -104,6 +105,7 @@ export function JarvisHud() {
           <Heatmap data={j.widgets.heatmap} />
         </div>
         <Schedule events={j.widgets.schedule?.events ?? null} />
+        <Spotify data={j.widgets.spotify ?? null} />
         <ToolFeedPanel events={j.toolEvents} />
         <Chat
           messages={j.messages}
