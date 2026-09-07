@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 interface SpotifyData {
   is_playing: boolean;
   progress_ms?: number;
