@@ -15,10 +15,11 @@ interface SpotifyProps {
   data: SpotifyData | null;
 }
 
-/** Spotify panel -- wraps SpotifyWidget, stacked above ToolFeedPanel at bottom-left. */
+/** Spotify panel -- wraps SpotifyWidget, positioned beside Schedule at the same top anchor
+ *  so it never collides with Schedule's variable height as event count changes. */
 export function Spotify({ data }: SpotifyProps) {
   return (
-    <div className="absolute left-[18px] bottom-[110px] w-[220px] pointer-events-auto">
+    <div className="absolute left-[250px] top-[358px] w-[220px] pointer-events-auto">
       <SpotifyWidget data={data} />
     </div>
   );
