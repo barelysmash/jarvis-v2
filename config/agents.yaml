@@ -1,0 +1,68 @@
+# JARVIS agent registry.
+#
+# Every sub-agent JARVIS can route to is declared here — nothing added
+# directly to JARVIS itself (JAM star-pattern rule). Loaded at startup by
+# orchestrator/agents.py; each entry loads independently and a failure
+# skips that agent only.
+#
+# Fields:
+#   transport:    adapter (in-process class wrapping a peer service)
+#                 | mcp-stdio (MCP server launched as a child process)
+#   requires_env: env vars that must be set or the agent is skipped
+#   enabled:      set false to park an agent without deleting its entry
+#
+# adapter entries:   module + class — no-arg constructor, .register(tools)
+# mcp-stdio entries: command + args (+ optional env_file, tools allowlist)
+
+agents:
+
+  tavily:
+    description: Web search via the Tavily API.
+    transport: adapter
+    module: tools.integrations.web_search
+    class: TavilyAdapter
+    requires_env: [TAVILY_API_KEY]
+
+  barelyswing:
+    description: >
+      BarelySwingTrade — read the swing book, arm/disarm the engine.
+      Same-host peer service; signals only, execution stays manual.
+    transport: adapter
+    module: tools.integrations.barelyswing
+    class: BarelySwingAdapter
+    requires_env: []
+
+  friday:
+    description: >
+      Friday — trading intelligence. Analysis-only peer service on
+      127.0.0.1:8082; forecasts and scans, no brokerage execution.
+      Results pass through the Friday source boundary in grounding.py.
+    transport: adapter
+    module: tools.integrations.friday
+    class: FridayAdapter
+    requires_env: [FRIDAY_API_TOKEN]
+
+  muse:
+    description: Muse — creative intelligence peer service.
+    transport: adapter
+    module: tools.integrations.muse
+    class: MuseAdapter
+    requires_env: [MUSE_BASE_URL]
+
+  sparrow:
+    description: >
+      Sparrow — acquisition agent. Finds genuinely-free assets
+      (public-domain, CC, open datasets, official APIs) and returns them
+      with resolved license + paste-ready attribution. Route here for
+      "find me an image/track/dataset/book" and license checks.
+    transport: mcp-stdio
+    command: python
+    args: ["-m", "sparrow.server"]
+    # Optional keys (Unsplash/Pexels). Loader ignores the file if absent,
+    # so this line is safe even before /etc/sparrow/secrets.env exists.
+    env_file: /etc/sparrow/secrets.env
+    tools:
+      - find_free_assets
+      - check_license
+      - find_official_source
+      - licensed_alternatives

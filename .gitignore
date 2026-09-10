@@ -57,3 +57,4 @@ config/google/
 *credentials*.json
 *client_secret*.json
 *.bak
+*.bak-*

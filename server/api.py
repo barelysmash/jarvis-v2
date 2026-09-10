@@ -57,41 +57,10 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             print(f"[server] Calendar registration failed: {exc}")
 
-    # Register web search if API key available
-    if os.environ.get("TAVILY_API_KEY"):
-        try:
-            from tools.integrations.web_search import TavilyAdapter
-            TavilyAdapter().register(tools)
-            print("[server] Web search (Tavily) loaded")
-        except Exception as exc:
-            print(f"[server] Web search registration failed: {exc}")
-    # Register BarelySwingTrade (read book + arm/disarm engine; same-host API)
-    try:
-        from tools.integrations.barelyswing import BarelySwingAdapter
-        BarelySwingAdapter().register(tools)
-        print("[server] BarelySwingTrade tools loaded")
-    except Exception as exc:
-        print(f"[server] BarelySwing registration failed: {exc}")
-
-    # Register Friday production analysis tools when configured.
-    if os.environ.get("FRIDAY_API_TOKEN"):
-        try:
-            from tools.integrations.friday import FridayAdapter
-
-            FridayAdapter().register(tools)
-            print("[server] Friday production tools loaded")
-        except Exception as exc:
-            print(f"[server] Friday registration failed: {exc}")
-
-    # Register Muse creative intelligence tools when configured.
-    if os.environ.get("MUSE_BASE_URL"):
-        try:
-            from tools.integrations.muse import MuseAdapter
-
-            MuseAdapter().register(tools)
-            print("[server] Muse creative tools loaded")
-        except Exception as exc:
-            print(f"[server] Muse registration failed: {exc}")
+    # Register all sub-agents from the declarative registry
+    # (config/agents.yaml: adapters and MCP-stdio agents alike).
+    from orchestrator.agents import load_agents
+    load_agents(tools)
 
     brain = JarvisBrain(
         api_key=api_key,

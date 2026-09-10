@@ -25,3 +25,6 @@ google-auth-oauthlib>=1.2.0
 python-dateutil>=2.8.2
 requests>=2.31.0
 httpx>=0.27.0,<1.0
+
+# Agents
+mcp>=1.0,<2   # MCP stdio agents (Sparrow); <2: Sparrow uses 1.x FastMCP API
