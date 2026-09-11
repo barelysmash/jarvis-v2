@@ -1064,6 +1064,19 @@ async def spotify_previous():
     spotify_client.previous_track()
     return {"ok": True}
 
+@app.get("/api/spotify/devices")
+async def spotify_devices():
+    return {"devices": spotify_client.get_devices()}
+
+@app.post("/api/spotify/devices/{device_id}/transfer")
+async def spotify_transfer(device_id: str):
+    spotify_client.transfer_playback(device_id)
+    return {"ok": True}
+
+@app.get("/api/spotify/queue")
+async def spotify_queue():
+    return {"queue": spotify_client.get_queue()}
+
 
 # Serve built HUD. Mounted last so /ws and /api/* match first.
 HUD_DIST = Path(__file__).resolve().parents[1] / "hud" / "dist"

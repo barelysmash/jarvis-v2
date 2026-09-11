@@ -78,5 +78,40 @@ class SpotifyClient:
     def previous_track(self):
         requests.post(f"{API_BASE}/me/player/previous", headers=self._headers(), timeout=10)
 
+    def get_devices(self):
+        resp = requests.get(
+            f"{API_BASE}/me/player/devices",
+            headers=self._headers(),
+            timeout=10,
+        )
+        resp.raise_for_status()
+        return resp.json().get("devices", [])
+
+    def transfer_playback(self, device_id, play=True):
+        requests.put(
+            f"{API_BASE}/me/player",
+            headers=self._headers(),
+            json={"device_ids": [device_id], "play": play},
+            timeout=10,
+        )
+
+    def get_queue(self):
+        resp = requests.get(
+            f"{API_BASE}/me/player/queue",
+            headers=self._headers(),
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        queue = data.get("queue", [])
+        return [
+            {
+                "track": item.get("name"),
+                "artist": ", ".join(a["name"] for a in item.get("artists", [])),
+                "album_art": (item.get("album", {}).get("images") or [{}])[0].get("url"),
+            }
+            for item in queue[:10]
+        ]
+
 
 spotify_client = SpotifyClient()
