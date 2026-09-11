@@ -56,7 +56,7 @@ agents:
       with resolved license + paste-ready attribution. Route here for
       "find me an image/track/dataset/book" and license checks.
     transport: mcp-stdio
-    command: python
+    command: /home/ocelia/jarvis-venv/bin/python
     args: ["-m", "sparrow.server"]
     # Optional keys (Unsplash/Pexels). Loader ignores the file if absent,
     # so this line is safe even before /etc/sparrow/secrets.env exists.
