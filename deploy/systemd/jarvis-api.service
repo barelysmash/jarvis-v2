@@ -5,6 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+Environment=PYTHONUNBUFFERED=1
 WorkingDirectory=%h/jarvis
 EnvironmentFile=%h/jarvis-data/env/jarvis.env
 ExecStart=%h/jarvis-venv/bin/uvicorn server.api:app \
