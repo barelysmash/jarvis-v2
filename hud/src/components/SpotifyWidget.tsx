@@ -73,6 +73,7 @@ function formatMs(ms: number): string {
 }
 
 export function SpotifyWidget({ data }: SpotifyWidgetProps) {
+  const [collapsed, setCollapsed] = useState(true);
   const [showDevices, setShowDevices] = useState(false);
   const [devices, setDevices] = useState<SpotifyDevice[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
