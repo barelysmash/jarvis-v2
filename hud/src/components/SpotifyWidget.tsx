@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface SpotifyData {
   is_playing: boolean;
@@ -9,6 +9,20 @@ interface SpotifyData {
   album?: string;
   album_art?: string;
   device?: string;
+}
+
+interface SpotifyDevice {
+  id: string;
+  name: string;
+  type: string;
+  is_active: boolean;
+  volume_percent?: number;
+}
+
+interface QueueItem {
+  track: string;
+  artist: string;
+  album_art?: string;
 }
 
 interface SpotifyWidgetProps {
@@ -23,6 +37,34 @@ async function callTransport(action: "play" | "pause" | "next" | "previous") {
   }
 }
 
+async function fetchDevices(): Promise<SpotifyDevice[]> {
+  try {
+    const resp = await fetch("/api/spotify/devices");
+    const data = await resp.json();
+    return data.devices ?? [];
+  } catch {
+    return [];
+  }
+}
+
+async function fetchQueue(): Promise<QueueItem[]> {
+  try {
+    const resp = await fetch("/api/spotify/queue");
+    const data = await resp.json();
+    return data.queue ?? [];
+  } catch {
+    return [];
+  }
+}
+
+async function transferDevice(deviceId: string) {
+  try {
+    await fetch(`/api/spotify/devices/${deviceId}/transfer`, { method: "POST" });
+  } catch {
+    // Swallow -- next poll will reconcile.
+  }
+}
+
 function formatMs(ms: number): string {
   const totalSec = Math.floor(ms / 1000);
   const min = Math.floor(totalSec / 60);
@@ -32,12 +74,26 @@ function formatMs(ms: number): string {
 
 export function SpotifyWidget({ data }: SpotifyWidgetProps) {
   const [collapsed, setCollapsed] = useState(true);
+  const [showDevices, setShowDevices] = useState(false);
+  const [devices, setDevices] = useState<SpotifyDevice[]>([]);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
 
   const hasTrack = !!data?.track;
   const progress =
     data?.duration_ms && data.duration_ms > 0
       ? Math.min(100, ((data.progress_ms ?? 0) / data.duration_ms) * 100)
       : 0;
+
+  useEffect(() => {
+    if (collapsed) return;
+    fetchDevices().then(setDevices);
+    fetchQueue().then(setQueue);
+  }, [collapsed]);
+
+  const handleDeviceClick = async (deviceId: string) => {
+    await transferDevice(deviceId);
+    setDevices(await fetchDevices());
+  };
 
   if (collapsed) {
     return (
@@ -134,6 +190,62 @@ export function SpotifyWidget({ data }: SpotifyWidgetProps) {
               </button>
             </div>
           </>
+        )}
+
+        <div
+          onClick={() => setShowDevices((v) => !v)}
+          className="mt-3 pt-2 border-t border-cyan-500/10 text-cyan-700 text-[9px] tracking-[0.1em] cursor-pointer flex items-center justify-between"
+        >
+          <span>DEVICES</span>
+          <span>{showDevices ? "▲" : "▼"}</span>
+        </div>
+
+        {showDevices && (
+          <div className="mt-1 space-y-1">
+            {devices.length === 0 ? (
+              <div className="text-cyan-800 italic text-[10px]">No devices found</div>
+            ) : (
+              devices.map((d) => (
+                <div
+                  key={d.id}
+                  onClick={() => handleDeviceClick(d.id)}
+                  className={`text-[10px] px-2 py-1 rounded-sm cursor-pointer truncate ${
+                    d.is_active
+                      ? "bg-cyan-500/20 text-cyan-200"
+                      : "text-cyan-600 hover:bg-cyan-500/10"
+                  }`}
+                >
+                  {d.is_active ? "● " : "○ "}
+                  {d.name}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {hasTrack && queue.length > 0 && (
+          <div className="mt-3 pt-2 border-t border-cyan-500/10">
+            <div className="text-cyan-700 text-[9px] tracking-[0.1em] mb-1">
+              UP NEXT
+            </div>
+            <div className="space-y-1 max-h-[120px] overflow-y-auto">
+              {queue.slice(0, 5).map((item, i) => (
+                <div key={i} className="flex items-center gap-2 text-[10px]">
+                  {item.album_art && (
+                    <img
+                      src={item.album_art}
+                      alt=""
+                      className="w-4 h-4 rounded-sm object-cover flex-shrink-0"
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <div className="text-cyan-400 truncate">{item.track}</div>
+                    <div className="text-cyan-700 truncate">{item.artist}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </div>
