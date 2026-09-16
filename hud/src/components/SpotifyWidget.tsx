@@ -73,7 +73,6 @@ function formatMs(ms: number): string {
 }
 
 export function SpotifyWidget({ data }: SpotifyWidgetProps) {
-  const [collapsed, setCollapsed] = useState(true);
   const [showDevices, setShowDevices] = useState(false);
   const [devices, setDevices] = useState<SpotifyDevice[]>([]);
   const [queue, setQueue] = useState<QueueItem[]>([]);
@@ -132,7 +131,7 @@ export function SpotifyWidget({ data }: SpotifyWidgetProps) {
         <div className="text-cyan-700 text-[10px] font-mono">▼</div>
       </div>
 
-      <div className="p-4 font-mono">
+      <div className="p-4 font-mono max-h-[320px] overflow-y-auto">
         {!hasTrack ? (
           <div className="text-cyan-800 italic text-xs">Nothing playing</div>
         ) : (
@@ -192,15 +191,11 @@ export function SpotifyWidget({ data }: SpotifyWidgetProps) {
           </>
         )}
 
-        <div
-          onClick={() => setShowDevices((v) => !v)}
-          className="mt-3 pt-2 border-t border-cyan-500/10 text-cyan-700 text-[9px] tracking-[0.1em] cursor-pointer flex items-center justify-between"
-        >
-          <span>DEVICES</span>
-          <span>{showDevices ? "▲" : "▼"}</span>
+        <div className="mt-3 pt-2 border-t border-cyan-500/10 text-cyan-700 text-[9px] tracking-[0.1em]">
+          DEVICES
         </div>
 
-        {showDevices && (
+        {(
           <div className="mt-1 space-y-1">
             {devices.length === 0 ? (
               <div className="text-cyan-800 italic text-[10px]">No devices found</div>
