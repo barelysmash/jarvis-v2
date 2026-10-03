@@ -57,24 +57,26 @@ def main():
             print(f"[briefing] Calendar setup failed: {exc}")
 
     brain = JarvisBrain(
-        api_key=api_key, memory=memory, tools=tools
+        api_key=api_key, memory=memory, tools=tools, origin="briefing"
     )
+
+    from orchestrator import event_log
 
     workflow = MorningBriefingWorkflow(brain, memory, tools)
-    result = workflow.run(
-        style=args.style,
-        location=args.location,
-        speak=not args.no_speak,
-    )
-
-    if result.get("status") == "success":
-        print(result["output"])
-        print(
-            f"\n[completed in {result['duration_seconds']:.1f}s]"
+    with event_log.job("briefing", style=args.style) as rec:
+        result = workflow.run(
+            style=args.style,
+            location=args.location,
+            speak=not args.no_speak,
         )
-    else:
-        print(f"Briefing failed: {result.get('error')}")
-        sys.exit(1)
+        if result.get("status") != "success":
+            raise RuntimeError(f"Briefing failed: {result.get('error')}")
+        rec["summary"] = str(result.get("output", ""))[:400]
+
+    print(result["output"])
+    print(
+        f"\n[completed in {result['duration_seconds']:.1f}s]"
+    )
 
 
 if __name__ == "__main__":
