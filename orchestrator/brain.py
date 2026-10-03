@@ -3,7 +3,9 @@
 import logging
 import re
 import json
-from typing import Optional
+import time
+import uuid
+from typing import Any, Optional
 
 import anthropic
 
@@ -24,8 +26,14 @@ class JarvisBrain:
         model: str = "claude-opus-4-7",
         memory: Optional[MemoryStore] = None,
         tools: Optional[ToolRegistry] = None,
+        origin: Optional[str] = None,
     ):
         self.client = anthropic.Anthropic(api_key=api_key)
+        # Who drives this brain (api, briefing, voice...) — cockpit label.
+        from orchestrator.event_log import process_label
+        self.origin = origin or process_label()
+        self._turn_id: Optional[str] = None
+        self._turn_stats: dict[str, int] = {}
         self.model = model
         self.user_name = user_name
         self.tools = tools or ToolRegistry()
@@ -40,7 +48,50 @@ class JarvisBrain:
         max_iterations: int = 10,
         runtime_context: Optional[dict] = None,
     ) -> str:
-        """Run the ReAct loop: reason, call tools, observe, repeat until done."""
+        """Run the ReAct loop: reason, call tools, observe, repeat until done.
+
+        Every turn is bracketed with turn.start / turn.end events (and an
+        llm event per model round-trip) so the cockpit can render the full
+        exchange, including the steps the HUD chat panel never shows.
+        """
+        turn_id = uuid.uuid4().hex[:8]
+        self._turn_id = turn_id
+        self._turn_stats = {"iterations": 0, "tools": 0, "errors": 0,
+                            "input_tokens": 0, "output_tokens": 0}
+        started = time.time()
+        self._log_event("turn.start", {
+            "turn_id": turn_id,
+            "origin": self.origin,
+            "input": user_input,
+            "model": self.model,
+            "history": len(self.conversation),
+            "runtime_context": runtime_context or None,
+        })
+        reply = ""
+        error: Optional[str] = None
+        try:
+            reply = self._run_turn(user_input, max_iterations, runtime_context)
+            return reply
+        except BaseException as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            self._log_event("turn.end", {
+                "turn_id": turn_id,
+                "origin": self.origin,
+                "text": reply,
+                "ms": int((time.time() - started) * 1000),
+                "error": error,
+                **self._turn_stats,
+            })
+            self._turn_id = None
+
+    def _run_turn(
+        self,
+        user_input: str,
+        max_iterations: int,
+        runtime_context: Optional[dict],
+    ) -> str:
         context = self.memory.retrieve(user_input, k=5)
         from datetime import datetime
         now_str = datetime.now().strftime("%A, %B %-d, %Y at %-I:%M %p")
@@ -75,6 +126,7 @@ class JarvisBrain:
         self.conversation.append({"role": "user", "content": user_input})
 
         for iteration in range(max_iterations):
+            call_started = time.time()
             try:
                 response = self.client.messages.create(
                     model=self.model,
@@ -85,7 +137,18 @@ class JarvisBrain:
                 )
             except Exception as exc:
                 logger.exception("Brain API call failed")
+                self._turn_stats["errors"] += 1
+                self._log_event("llm", {
+                    "turn_id": self._turn_id,
+                    "iteration": iteration + 1,
+                    "model": self.model,
+                    "ms": int((time.time() - call_started) * 1000),
+                    "stop_reason": "api_error",
+                    "error": str(exc),
+                })
                 return f"My apologies, {self.user_name} - I encountered an issue: {exc}"
+
+            self._log_llm(response, iteration + 1, call_started)
 
             self.conversation.append(
                 {"role": "assistant", "content": response.content}
@@ -102,7 +165,10 @@ class JarvisBrain:
                 for block in response.content:
                     if getattr(block, "type", None) == "tool_use":
                         logger.info("Tool call: %s(%s)", block.name, block.input)
-                        self._emit_tool_event(block.name, block.input, "running")
+                        self._emit_tool_event(
+                            block.name, block.input, "running", call_id=getattr(block, "id", None)
+                        )
+                        tool_started = time.time()
 
                         try:
                             result, is_error = self.tools.execute(block.name, block.input)
@@ -115,7 +181,15 @@ class JarvisBrain:
                             result, is_error = f"Tool crashed: {exc}", True
 
                         status = "error" if is_error else "success"
-                        self._emit_tool_event(block.name, block.input, status)
+                        self._turn_stats["tools"] += 1
+                        if is_error:
+                            self._turn_stats["errors"] += 1
+                        self._emit_tool_event(
+                            block.name, block.input, status,
+                            call_id=getattr(block, "id", None),
+                            ms=int((time.time() - tool_started) * 1000),
+                            result=result,
+                        )
 
                         # If this was a calendar list and it succeeded, push to widget
                         if block.name == "calendar_list_events" and not is_error:
@@ -209,16 +283,69 @@ class JarvisBrain:
             start += 1
         self.conversation = self.conversation[start:]
 
-    def _emit_tool_event(self, name: str, args: dict, status: str):
-        """Fire a tool event to both the in-process bus and the SQLite log."""
+    def _log_event(self, event_type: str, payload: dict):
+        """Cockpit-only event: SQLite log, never the HUD bus."""
+        try:
+            from orchestrator import event_log
+            event_log.emit(source="brain", event_type=event_type, payload=payload)
+        except Exception:
+            logger.debug("event emit failed", exc_info=True)
+
+    def _log_llm(self, response, iteration: int, started: float):
+        usage = getattr(response, "usage", None)
+        in_tok = int(getattr(usage, "input_tokens", 0) or 0)
+        out_tok = int(getattr(usage, "output_tokens", 0) or 0)
+        stats = getattr(self, "_turn_stats", None)
+        if stats is not None:
+            stats["iterations"] = iteration
+            stats["input_tokens"] += in_tok
+            stats["output_tokens"] += out_tok
+        self._log_event("llm", {
+            "turn_id": self._turn_id,
+            "iteration": iteration,
+            "model": getattr(response, "model", self.model),
+            "ms": int((time.time() - started) * 1000),
+            "stop_reason": getattr(response, "stop_reason", None),
+            "input_tokens": in_tok,
+            "output_tokens": out_tok,
+            "text": self._extract_text(getattr(response, "content", []) or []),
+            "tool_calls": [
+                getattr(b, "name", "?")
+                for b in (getattr(response, "content", []) or [])
+                if getattr(b, "type", None) == "tool_use"
+            ],
+        })
+
+    def _emit_tool_event(
+        self,
+        name: str,
+        args: dict,
+        status: str,
+        call_id: Optional[str] = None,
+        ms: Optional[int] = None,
+        result=None,
+    ):
+        """Fire a tool event to both the in-process bus and the SQLite log.
+
+        The HUD reads name/args/status; the cockpit also uses turn_id,
+        call_id (pairs running→done), agent, ms and the clipped result.
+        """
+        try:
+            agent = self.tools.owner_of(name)
+        except Exception:
+            agent = "unknown"
         # Write to event log (works across processes)
         try:
             from orchestrator import event_log
-            event_log.emit(
-                source="brain",
-                event_type="tool",
-                payload={"name": name, "args": args, "status": status},
-            )
+            payload: dict[str, Any] = {
+                "name": name, "args": args, "status": status,
+                "turn_id": self._turn_id, "call_id": call_id, "agent": agent,
+            }
+            if ms is not None:
+                payload["ms"] = ms
+            if status != "running":
+                payload["result"] = event_log.clip(result)
+            event_log.emit(source="brain", event_type="tool", payload=payload)
         except Exception:
             pass
 

@@ -35,8 +35,13 @@ def main():
     )
     client = anthropic.Anthropic(api_key=api_key)
 
-    cycle = SleepCycle(memory, client)
-    report = cycle.run(mode=mode)
+    from orchestrator import event_log
+
+    with event_log.job("sleep", mode=mode) as rec:
+        cycle = SleepCycle(memory, client)
+        report = cycle.run(mode=mode)
+        pruned = event_log.prune_older_than(event_log.retention_seconds())
+        rec["summary"] = f"{mode} cycle done; pruned {pruned} old events"
 
     print(json.dumps(report, indent=2))
 

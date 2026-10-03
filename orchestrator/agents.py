@@ -35,6 +35,10 @@ import yaml
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_PATH = "config/agents.yaml"
+
+# Load outcome per agent, read by the cockpit (/api/cockpit/agents).
+# name -> {status, transport, description, detail, tools, ts}
+AGENT_STATUS: dict[str, dict[str, Any]] = {}
 MCP_CALL_TIMEOUT = 60.0
 MCP_START_TIMEOUT = 20.0
 
@@ -204,6 +208,7 @@ def load_agents(tools, config_path: str | None = None) -> None:
         try:
             if not spec.get("enabled", True):
                 print(f"[agents] {name}: disabled — skipped")
+                _record(name, spec, "disabled", "enabled: false")
                 continue
 
             missing = [
@@ -215,18 +220,68 @@ def load_agents(tools, config_path: str | None = None) -> None:
                     f"[agents] {name}: skipped "
                     f"(missing env: {', '.join(missing)})"
                 )
+                _record(name, spec, "skipped",
+                        f"missing env: {', '.join(missing)}")
                 continue
 
             transport = spec.get("transport", "adapter")
-            if transport == "adapter":
-                _load_adapter(name, spec, tools)
-                print(f"[agents] {name}: adapter loaded")
-            elif transport == "mcp-stdio":
-                agent = McpStdioAgent(name, spec)
-                agent.start()
-                count = agent.register_tools(tools)
-                print(f"[agents] {name}: mcp-stdio loaded ({count} tools)")
-            else:
-                print(f"[agents] {name}: unknown transport '{transport}' — skipped")
+            tools._owner_ctx = name
+            try:
+                if transport == "adapter":
+                    _load_adapter(name, spec, tools)
+                    print(f"[agents] {name}: adapter loaded")
+                elif transport == "mcp-stdio":
+                    agent = McpStdioAgent(name, spec)
+                    agent.start()
+                    count = agent.register_tools(tools)
+                    print(f"[agents] {name}: mcp-stdio loaded ({count} tools)")
+                else:
+                    print(f"[agents] {name}: unknown transport '{transport}' — skipped")
+                    _record(name, spec, "skipped",
+                            f"unknown transport '{transport}'")
+                    continue
+            finally:
+                tools._owner_ctx = None
+            _record(name, spec, "loaded", "",
+                    tools.owners().get(name, []))
         except Exception as exc:
             print(f"[agents] {name}: registration failed: {exc}")
+            _record(name, spec, "failed", str(exc))
+
+
+def _record(
+    name: str,
+    spec: dict[str, Any],
+    status: str,
+    detail: str,
+    tool_names: list[str] | None = None,
+) -> None:
+    """Remember the load outcome and publish it to the event log."""
+    import time
+
+    entry = {
+        "status": status,
+        "transport": spec.get("transport", "adapter"),
+        "description": " ".join(str(spec.get("description", "")).split()),
+        "detail": detail,
+        "tools": sorted(tool_names or []),
+        "ts": time.time(),
+    }
+    AGENT_STATUS[name] = entry
+    try:
+        from orchestrator import event_log
+
+        event_log.emit(
+            source=name,
+            event_type="agent",
+            payload={
+                "agent": name,
+                "kind": "lifecycle",
+                "severity": "error" if status == "failed" else "info",
+                "summary": f"{name} {status}"
+                + (f" — {detail}" if detail else "")
+                + (f" ({len(entry['tools'])} tools)" if status == "loaded" else ""),
+            },
+        )
+    except Exception:
+        logger.debug("agent lifecycle emit failed", exc_info=True)

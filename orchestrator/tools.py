@@ -16,6 +16,9 @@ class ToolRegistry:
 
     def __init__(self):
         self._tools: dict[str, dict] = {}
+        # Which agent registered each tool. load_agents() sets
+        # _owner_ctx while an agent registers, so adapters need no changes.
+        self._owner_ctx: str | None = None
         self._register_defaults()
 
     # ─── Registration ────────────────────────────────────────
@@ -26,12 +29,14 @@ class ToolRegistry:
         description: str,
         schema: dict,
         handler: Callable,
+        owner: str | None = None,
     ):
         """Register a single tool."""
         self._tools[name] = {
             "description": description,
             "input_schema": schema,
             "handler": handler,
+            "owner": owner or self._owner_ctx or "jarvis",
         }
         logger.debug("Registered tool: %s", name)
 
@@ -45,6 +50,22 @@ class ToolRegistry:
             }
             for name, t in self._tools.items()
         ]
+
+    def names(self) -> list[str]:
+        """Registered tool names."""
+        return list(self._tools)
+
+    def owner_of(self, name: str) -> str:
+        """Agent that registered a tool ('jarvis' for built-ins)."""
+        tool = self._tools.get(name)
+        return str(tool.get("owner", "jarvis")) if tool else "unknown"
+
+    def owners(self) -> dict[str, list[str]]:
+        """Map agent name -> tool names it registered."""
+        out: dict[str, list[str]] = {}
+        for tool_name, spec in self._tools.items():
+            out.setdefault(str(spec.get("owner", "jarvis")), []).append(tool_name)
+        return out
 
     def execute(self, name: str, args: dict) -> tuple[Any, bool]:
         """Run a tool. Returns (result, is_error).
@@ -91,6 +112,7 @@ class ToolRegistry:
     def register_calendar(self, calendar: "GoogleCalendar"):
         """Register all calendar tools with the brain."""
 
+        self._owner_ctx = "calendar"
         self.register(
             name="calendar_list_events",
             description=(
@@ -212,6 +234,7 @@ class ToolRegistry:
             },
             handler=lambda **kwargs: calendar.find_free_slots(**kwargs),
         )
+        self._owner_ctx = None
 
     # ─── Defaults ────────────────────────────────────────────
 
@@ -220,3 +243,8 @@ class ToolRegistry:
         # brain routes text replies into it instead of returning them in
         # the response field, producing empty API responses.
         pass
+
+    # Collectors in the morning briefing call ``tools.list()``; that method
+    # never existed, so every collector raised AttributeError. Alias it to
+    # names(). Bound last so ``list`` annotations above still mean builtin.
+    list = names

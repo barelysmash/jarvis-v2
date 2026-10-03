@@ -212,6 +212,10 @@ def _validate_muse_review_context(
 
 app = FastAPI(lifespan=lifespan, title="JARVIS API")
 
+# Cockpit (second-screen detail view) + /api/events ingest.
+from server.cockpit import router as cockpit_router  # noqa: E402
+app.include_router(cockpit_router)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -395,6 +399,10 @@ def muse_artifact_content(
         headers={"Cache-Control": "no-store"},
     )
 
+_OWN_PID = os.getpid()
+_HUD_EVENT_TYPES = {"tool", "widget", "conversation", "state"}
+
+
 async def _event_log_poller():
     """Poll the SQLite event log and broadcast new entries to WS subscribers."""
     import time
@@ -424,8 +432,15 @@ async def _event_log_poller():
                 _cache_widget_event(bus_event)
 
                 # Only broadcast events that didn't originate in this process
-                # (the brain emits to bus directly already).
-                if evt["source"] == "brain":
+                # (this process's brain already published them on the bus).
+                # Previously this skipped every source=="brain" row, which
+                # also dropped tool events from the briefing process's brain.
+                if evt.get("pid") == _OWN_PID or (
+                    evt.get("pid") is None and evt["source"] == "brain"
+                ):
+                    continue
+                # Cockpit-only event types never go to the HUD bus.
+                if evt["type"] not in _HUD_EVENT_TYPES:
                     continue
                 for q in list(bus.subscribers):
                     try:
