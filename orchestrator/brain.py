@@ -357,7 +357,9 @@ class JarvisBrain:
             event = {
                 "type": "tool",
                 "timestamp": __import__("datetime").datetime.now().isoformat(),
-                "data": {"name": name, "args": args, "status": status},
+                # `agent` lights the matching node in the HUD constellation;
+                # "jarvis"/"calendar" (built-ins) match nothing and are ignored.
+                "data": {"name": name, "args": args, "status": status, "agent": agent},
             }
             for q in list(bus.subscribers):
                 try:

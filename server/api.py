@@ -100,6 +100,15 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
+def _agents_snapshot() -> list[dict]:
+    """Agent registry as declared in agents.yaml, with load status per agent."""
+    try:
+        from orchestrator.agents import registry_snapshot
+        return registry_snapshot()
+    except Exception:
+        return []
+
+
 # Last-known widget event per widget name; replayed to new WS clients so
 # fresh connections render real data immediately instead of waiting out
 # each publisher's broadcast cycle (up to 10 min for stocks/news).
@@ -237,6 +246,8 @@ async def websocket_endpoint(ws: WebSocket):
                 "uptime_seconds": 0,
                 "version": "1.0.0",
                 "name": "JARVIS",
+                # Declared subagents + load outcome, for the HUD constellation.
+                "agents": _agents_snapshot(),
             },
         }
     )
@@ -308,6 +319,7 @@ async def status():
             ),
         },
         "tools": list(tools._tools.keys()) if tools else [],
+        "agents": _agents_snapshot(),
     }
 
 @app.get("/api/memory")

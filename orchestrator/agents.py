@@ -36,9 +36,32 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_PATH = "config/agents.yaml"
 
-# Load outcome per agent, read by the cockpit (/api/cockpit/agents).
+# Load outcome per agent, read by the cockpit (/api/cockpit/agents) and,
+# via registry_snapshot(), by the HUD's subagent constellation.
 # name -> {status, transport, description, detail, tools, ts}
 AGENT_STATUS: dict[str, dict[str, Any]] = {}
+
+
+def registry_snapshot() -> list[dict[str, Any]]:
+    """Declared agents in agents.yaml order, shaped for the HUD.
+
+    One record per entry in AGENT_STATUS (dict insertion order == yaml
+    declaration order): name, description, transport, status
+    (loaded | skipped | disabled | failed), reason (load detail or None),
+    tools. The HUD draws one constellation node per record and only
+    lights nodes whose status is "loaded".
+    """
+    out: list[dict[str, Any]] = []
+    for name, entry in AGENT_STATUS.items():
+        out.append({
+            "name": name,
+            "description": entry.get("description", ""),
+            "transport": entry.get("transport", "adapter"),
+            "status": entry.get("status", "failed"),
+            "reason": entry.get("detail") or None,
+            "tools": list(entry.get("tools", [])),
+        })
+    return out
 MCP_CALL_TIMEOUT = 60.0
 MCP_START_TIMEOUT = 20.0
 
