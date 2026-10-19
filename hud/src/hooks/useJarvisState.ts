@@ -15,12 +15,26 @@ export interface ToolEvent {
   status: "running" | "success" | "error";
   args: Record<string, any>;
   timestamp: string;
+  /** Owning subagent (from agents.yaml), or null for a JARVIS-native tool. */
+  agent: string | null;
+}
+
+/** One declared subagent, as reported by orchestrator/agents.py. */
+export interface AgentInfo {
+  name: string;
+  description: string;
+  transport: "adapter" | "mcp-stdio" | string;
+  status: "loaded" | "skipped" | "disabled" | "failed" | string;
+  reason: string | null;
+  tools: string[];
 }
 
 export interface JarvisState {
   state: "idle" | "listening" | "thinking" | "speaking";
   messages: Message[];
   toolEvents: ToolEvent[];
+  /** Agent registry from the WS snapshot, in agents.yaml declaration order. */
+  agents: AgentInfo[];
   audioLevel: number;
   status: {
     uptime: number;
@@ -31,11 +45,24 @@ export interface JarvisState {
   widgets: Record<string, any>;
 }
 
+/**
+ * Fallback owner lookup for tool events that arrive without an `agent`
+ * field (older server, or replayed from the SQLite event log). Matches
+ * against the tool lists the registry snapshot reported.
+ */
+function ownerOf(toolName: string, agents: AgentInfo[]): string | null {
+  for (const a of agents) {
+    if (a.tools.includes(toolName)) return a.name;
+  }
+  return null;
+}
+
 export function useJarvisState(): JarvisState {
   const [state, setState] = useState<JarvisState>({
     state: "idle",
     messages: [],
     toolEvents: [],
+    agents: [],
     audioLevel: 0,
     status: { uptime: 0, latencyMs: 0, memoryFacts: 0, online: false },
     widgets: {},
@@ -105,6 +132,9 @@ export function useJarvisState(): JarvisState {
                     name: evt.data.name,
                     args: evt.data.args || {},
                     status: evt.data.status,
+                    agent:
+                      evt.data.agent ??
+                      ownerOf(evt.data.name, s.agents),
                     timestamp: new Date(evt.timestamp).toLocaleTimeString(
                       [],
                       {
@@ -122,7 +152,9 @@ export function useJarvisState(): JarvisState {
                 widgets: { ...s.widgets, [evt.data.widget]: evt.data.data },
               };
             case "snapshot":
-              return s;
+              return Array.isArray(evt.data?.agents)
+                ? { ...s, agents: evt.data.agents }
+                : s;
             default:
               return s;
           }
