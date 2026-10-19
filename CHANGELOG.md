@@ -8,7 +8,7 @@ Most recent at top.
 > Entries before v2.16 were tracked in conversation rather than in-repo;
 > `version.ts` referenced this file but it had never been created.
 
-## v2.17 -- 2026-10-19
+## v2.18 -- 2026-10-19
 
 **Subagent constellation.**
 The JAM star pattern, drawn literally. Every agent declared in
@@ -26,15 +26,48 @@ spoked to the iris. Declaration order reads left to right.
 - Hover a node for description, transport, load reason, and tool list.
 - `prefers-reduced-motion` disables the flow/pulse animations.
 
-Server side: `orchestrator/agents.py` now records per-agent load outcome
-and the tools each registered (`registry_snapshot()`, `agent_for_tool()`);
-the WS `snapshot` and `/api/status` carry `agents`; `tool` events carry an
-`agent` field (null for JARVIS-native tools). The HUD falls back to
-matching tool names against the snapshot when the field is absent, so
-replayed events from the SQLite log still light the right node.
+Built on the cockpit's (v2.17) ownership tracking rather than a second
+registry: `orchestrator/agents.py` gains `registry_snapshot()` over
+`AGENT_STATUS`; the WS `snapshot` and `/api/status` carry `agents`; the
+HUD bus `tool` event carries `agent` (from `ToolRegistry.owner_of`, so
+built-ins arrive as `jarvis`/`calendar` and light nothing). The HUD falls
+back to matching tool names against the snapshot when the field is absent.
 
 New: `hooks/useAgentActivity.ts`, `panels/AgentConstellation.tsx`,
 `tests/test_agents_registry.py`.
+
+Housekeeping: the v2.17 cockpit below had been deployed from a tarball on
+2026-10-03 and never committed; it was recovered from guildenstern and
+committed as 6e9997a on 2026-10-19. `~/jarvis` on the box moves back to
+the git checkout with this release.
+
+## v2.17 -- 2026-10-03
+
+**Cockpit: a second-screen, full-detail view** (`/cockpit.html`).
+The HUD stays glanceable; the cockpit shows everything. See
+`docs/COCKPIT.md`.
+
+- New Vite entry `hud/cockpit.html` (`src/cockpit/`), built alongside the
+  HUD and served by the same static mount. `npm run electron:cockpit` opens
+  it maximized on the second display.
+- Panes: Conversation (every turn with model calls, tool calls, tokens,
+  latency), Tool activity (live + stats + raw tail), Scheduled
+  (systemd user timers, next/last run, run-now), Agents & changes.
+- Backend: `server/cockpit.py` adds `/ws/cockpit` (id-based tail of the
+  event log, gap-free resume), `/api/cockpit/{events,agents,schedule}`,
+  and `POST /api/events` (bearer-token ingest for sub-agent changes).
+- Brain emits `turn.start` / `llm` / `turn.end`; tool events now carry
+  turn id, call id, owning agent, duration and a clipped result.
+- Event log gains `pid`/`proc` columns (auto-migrated) and 7-day retention
+  pruned by the sleep cycle (it was never pruned before).
+
+**Fixes found along the way**
+- The HUD poller skipped every `source == "brain"` row, so tool activity
+  from the briefing process's brain never reached the HUD. It now skips
+  only rows written by its own process.
+- Briefing collectors called `tools.list()`, which did not exist; the
+  AttributeError was swallowed by `gather(return_exceptions=True)`, so the
+  calendar section of every briefing was silently empty. Added the method.
 
 ## v2.16 -- 2026-07-28
 

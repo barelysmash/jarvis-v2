@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "electron": "electron .",
+    "electron:cockpit": "electron . --cockpit",
+    "electron:cockpit-only": "electron . --cockpit-only",
     "start": "concurrently \"npm run dev\" \"wait-on http://localhost:5173 && npm run electron\""
   },
   "dependencies": {
