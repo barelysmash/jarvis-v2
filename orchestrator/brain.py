@@ -211,13 +211,23 @@ class JarvisBrain:
 
     def _emit_tool_event(self, name: str, args: dict, status: str):
         """Fire a tool event to both the in-process bus and the SQLite log."""
+        # Which subagent owns this tool (None for JARVIS-native tools). The
+        # HUD uses it to light the matching node in the agent constellation.
+        agent = None
+        try:
+            from orchestrator.agents import agent_for_tool
+            agent = agent_for_tool(name)
+        except Exception:
+            pass
+        payload = {"name": name, "args": args, "status": status, "agent": agent}
+
         # Write to event log (works across processes)
         try:
             from orchestrator import event_log
             event_log.emit(
                 source="brain",
                 event_type="tool",
-                payload={"name": name, "args": args, "status": status},
+                payload=payload,
             )
         except Exception:
             pass
@@ -230,7 +240,7 @@ class JarvisBrain:
             event = {
                 "type": "tool",
                 "timestamp": __import__("datetime").datetime.now().isoformat(),
-                "data": {"name": name, "args": args, "status": status},
+                "data": payload,
             }
             for q in list(bus.subscribers):
                 try:

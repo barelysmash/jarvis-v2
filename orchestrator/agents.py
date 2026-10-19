@@ -39,6 +39,54 @@ MCP_CALL_TIMEOUT = 60.0
 MCP_START_TIMEOUT = 20.0
 
 
+# ─── Registry state (read by the HUD) ────────────────────────
+#
+# One record per agent declared in agents.yaml, in declaration order, with
+# the outcome of its load and the tool names it registered. The HUD draws
+# its subagent constellation from this, so it only ever shows agents that
+# exist in config and only lights the ones that actually loaded.
+
+_REGISTRY: dict[str, dict] = {}
+_TOOL_OWNER: dict[str, str] = {}
+
+
+def _record(
+    name: str,
+    spec: dict,
+    status: str,
+    reason: str | None = None,
+    tool_names: list[str] | None = None,
+) -> None:
+    tool_names = tool_names or []
+    _REGISTRY[name] = {
+        "name": name,
+        "description": " ".join(str(spec.get("description", "")).split()),
+        "transport": spec.get("transport", "adapter"),
+        "status": status,  # loaded | skipped | disabled | failed
+        "reason": reason,
+        "tools": tool_names,
+    }
+    for tool_name in tool_names:
+        _TOOL_OWNER[tool_name] = name
+
+
+def registry_snapshot() -> list[dict]:
+    """Serializable view of every declared agent, in declaration order."""
+    return [dict(entry, tools=list(entry["tools"])) for entry in _REGISTRY.values()]
+
+
+def agent_for_tool(tool_name: str) -> str | None:
+    """Which agent registered this tool, or None for a JARVIS-native tool."""
+    return _TOOL_OWNER.get(tool_name)
+
+
+def _tool_keys(tools) -> set[str]:
+    registry = getattr(tools, "_tools", None)
+    if registry is None:
+        registry = getattr(tools, "tools", {})
+    return set(registry.keys())
+
+
 # ─── Adapter transport ───────────────────────────────────────
 
 
@@ -200,10 +248,16 @@ def load_agents(tools, config_path: str | None = None) -> None:
         print(f"[agents] registry at {path} declares no agents")
         return
 
+    _REGISTRY.clear()
+    _TOOL_OWNER.clear()
+
     for name, spec in agents.items():
+        spec = spec or {}
+        before = _tool_keys(tools)
         try:
             if not spec.get("enabled", True):
                 print(f"[agents] {name}: disabled — skipped")
+                _record(name, spec, "disabled", "enabled: false")
                 continue
 
             missing = [
@@ -211,10 +265,9 @@ def load_agents(tools, config_path: str | None = None) -> None:
                 if not os.environ.get(var)
             ]
             if missing:
-                print(
-                    f"[agents] {name}: skipped "
-                    f"(missing env: {', '.join(missing)})"
-                )
+                reason = f"missing env: {', '.join(missing)}"
+                print(f"[agents] {name}: skipped ({reason})")
+                _record(name, spec, "skipped", reason)
                 continue
 
             transport = spec.get("transport", "adapter")
@@ -227,6 +280,13 @@ def load_agents(tools, config_path: str | None = None) -> None:
                 count = agent.register_tools(tools)
                 print(f"[agents] {name}: mcp-stdio loaded ({count} tools)")
             else:
-                print(f"[agents] {name}: unknown transport '{transport}' — skipped")
+                reason = f"unknown transport '{transport}'"
+                print(f"[agents] {name}: {reason} — skipped")
+                _record(name, spec, "skipped", reason)
+                continue
+
+            added = sorted(_tool_keys(tools) - before)
+            _record(name, spec, "loaded", None, added)
         except Exception as exc:
             print(f"[agents] {name}: registration failed: {exc}")
+            _record(name, spec, "failed", str(exc), sorted(_tool_keys(tools) - before))

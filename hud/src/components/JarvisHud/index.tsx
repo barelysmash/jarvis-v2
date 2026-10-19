@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useShutter } from './hooks/useShutter';
 import { useViewportScale } from './hooks/useViewportScale';
 import { useLensState } from './hooks/useLensState';
+import { useAgentActivity } from './hooks/useAgentActivity';
 import { useJarvisState } from '../../hooks/useJarvisState';
 import { Lens } from './Lens';
 import { DateClock } from './panels/DateClock';
@@ -19,6 +20,7 @@ import { NewsTicker } from './panels/NewsTicker';
 import { MuseReview } from './panels/MuseReview';
 import { CPURamRings } from './panels/CPURamRings';
 import { DiskEnergy } from './panels/DiskEnergy';
+import { AgentConstellation } from './panels/AgentConstellation';
 import { Scanline } from './effects/Scanline';
 import { Vignette } from './effects/Vignette';
 import { Flash } from './effects/Flash';
@@ -38,6 +40,7 @@ export function JarvisHud() {
   const scale = useViewportScale();
   const j = useJarvisState();
   const lens = useLensState(j);
+  const agents = useAgentActivity(j);
   const museReview = j.widgets.muse_review;
   const [museReviewContext, setMuseReviewContext] =
     useState<MuseReviewContext | null>(null);
@@ -81,6 +84,9 @@ export function JarvisHud() {
           viewBox="-700 -394 1400 788"
           preserveAspectRatio="xMidYMid meet"
         >
+          {/* Subagent constellation sits under the lens; drawn first so the
+              lens halo/particles paint over the spoke roots (v2.17). */}
+          <AgentConstellation agents={agents} />
           <Lens bladeFireRef={bladeFireRef} audioLevel={j.audioLevel} />
           <DateClock />
           <CPURamRings data={j.widgets.system} />
