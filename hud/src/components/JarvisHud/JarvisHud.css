@@ -203,3 +203,38 @@
   .jhud .jhud-lens { transition: none; }
 }
 
+
+/* ── Subagent constellation (v2.17) ──────────────────────────────
+   Nodes on an arc under the lens, one per agents.yaml entry. Only the
+   active state animates: the spoke's dash pattern flows hub → node and
+   the node breathes. Everything else is static colour. */
+.jhud .jhud-agent-active .jhud-agent-spoke {
+  animation: jhud-agent-flow 0.9s linear infinite;
+}
+@keyframes jhud-agent-flow { to { stroke-dashoffset: -22; } }
+
+.jhud .jhud-agent-active .jhud-agent-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: jhud-agent-pulse 1.4s ease-in-out infinite;
+}
+@keyframes jhud-agent-pulse {
+  0%, 100% { transform: scale(1);    opacity: 0.18; }
+  50%      { transform: scale(1.35); opacity: 0.34; }
+}
+
+.jhud .jhud-agent-error .jhud-agent-ring {
+  animation: jhud-blink 0.8s ease-in-out 3;
+}
+
+.jhud .jhud-agent-ring,
+.jhud .jhud-agent-spoke,
+.jhud .jhud-agent-caption {
+  transition: stroke 0.25s ease, fill 0.25s ease, opacity 0.25s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jhud .jhud-agent-spoke,
+  .jhud .jhud-agent-halo,
+  .jhud .jhud-agent-ring { animation: none; }
+}

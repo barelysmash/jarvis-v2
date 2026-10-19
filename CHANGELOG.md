@@ -8,6 +8,34 @@ Most recent at top.
 > Entries before v2.16 were tracked in conversation rather than in-repo;
 > `version.ts` referenced this file but it had never been created.
 
+## v2.17 -- 2026-10-19
+
+**Subagent constellation.**
+The JAM star pattern, drawn literally. Every agent declared in
+`config/agents.yaml` is a satellite node on an arc beneath the lens (r=272
+on the SVG stage, between SPOTIFY and CONVERSATION, above the wordmark),
+spoked to the iris. Declaration order reads left to right.
+
+- Node states, all backed by real events: `offline` (dashed ring, dim --
+  registry reported skipped/disabled/failed; caption says NO KEY / PARKED /
+  FAILED), `idle` (steady; caption READY or `N CALLS`), `active` (spoke dash
+  flows hub -> node, halo breathes; caption is the running tool with the
+  agent prefix stripped), `error` (red, 4s hold, same as the iris).
+- `mcp-stdio` agents (Sparrow) carry a dotted outer ring; in-process
+  adapters don't.
+- Hover a node for description, transport, load reason, and tool list.
+- `prefers-reduced-motion` disables the flow/pulse animations.
+
+Server side: `orchestrator/agents.py` now records per-agent load outcome
+and the tools each registered (`registry_snapshot()`, `agent_for_tool()`);
+the WS `snapshot` and `/api/status` carry `agents`; `tool` events carry an
+`agent` field (null for JARVIS-native tools). The HUD falls back to
+matching tool names against the snapshot when the field is absent, so
+replayed events from the SQLite log still light the right node.
+
+New: `hooks/useAgentActivity.ts`, `panels/AgentConstellation.tsx`,
+`tests/test_agents_registry.py`.
+
 ## v2.16 -- 2026-07-28
 
 **TOOL ACTIVITY is collapsible.**
