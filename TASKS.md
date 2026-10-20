@@ -40,10 +40,16 @@ Operational Intelligence      Trading Intelligence
 - [ ] **Loop automation** — Jarvis runs tasks unattended:
       - Session isolation per routine run (fresh conversation, never the shared
         singleton — non-negotiable for unattended operation)
-      - GoalRunner with evaluator model
-      - `routines.yaml` scheduled via systemd timers
-      - `/api/events` endpoint for proactive triggers
-        (fed by Friday/BarelyTrade Events and OpenClaw)
+      - GoalRunner with evaluator model (`kind: goal` reserved in routines.yaml)
+      - [x] `routines.yaml` scheduled via systemd timers — DONE 2026-10-20
+        (`config/routines.yaml` → generated `jarvis-routine-*` units,
+        `scripts/run_routine.py`, `docs/ROUTINES.md`). First routine:
+        `conformance-sweep`, nightly `jam validate` across atlas + jarvis-v2
+        with drift events into the cockpit.
+      - [ ] Contract propagation routine: JAM release → version-bump branches
+        in every conforming repo (stops before merge)
+      - [x] `/api/events` endpoint for proactive triggers (cockpit, v2.17)
+      - [ ] Feed `/api/events` from Friday/BarelyTrade Events and OpenClaw
 
 ## Quality of life
 - [ ] ssh-agent setup on rosencrantz (kill the 5x passphrase prompts per deploy)

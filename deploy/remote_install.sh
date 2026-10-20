@@ -78,6 +78,7 @@ mkdir -p "${TARGET_DATA}/chroma"
 mkdir -p "${TARGET_DATA}/sleep_logs"
 mkdir -p "${TARGET_DATA}/google"
 mkdir -p "${TARGET_DATA}/logs"
+mkdir -p "${TARGET_DATA}/routines"
 
 # Symlink data into the release so the app finds it at relative paths
 ln -sfn "${TARGET_DATA}" "${RELEASE_PATH}/data"
@@ -131,6 +132,36 @@ for timer in "${TIMERS[@]}"; do
         systemctl --user enable --now "${timer}" || true
     fi
 done
+
+# Routine timers are generated from config/routines.yaml (see
+# docs/ROUTINES.md). Every jarvis-routine-*.timer in the release is enabled
+# unless the registry rendered it with `enabled: false`, in which case it is
+# installed but left disabled (and stopped if it was running before).
+shopt -s nullglob
+for timer_path in "${RELEASE_PATH}/deploy/systemd"/jarvis-routine-*.timer; do
+    timer="$(basename "${timer_path}")"
+    if head -n 1 "${timer_path}" | grep -q '^# jarvis-routine-enabled: false'; then
+        echo "[install] Routine timer ${timer} is disabled in routines.yaml"
+        systemctl --user disable --now "${timer}" 2>/dev/null || true
+    else
+        echo "[install] Enabling routine timer ${timer}..."
+        systemctl --user enable --now "${timer}" || true
+    fi
+done
+shopt -u nullglob
+
+# Routine timers whose registry entry was removed: the unit file is gone
+# from the release, so disable any stale copy still installed.
+for installed in "${SYSTEMD_USER_DIR}"/jarvis-routine-*.timer; do
+    [[ -f "${installed}" ]] || continue
+    timer="$(basename "${installed}")"
+    if [[ ! -f "${RELEASE_PATH}/deploy/systemd/${timer}" ]]; then
+        echo "[install] Removing orphaned routine timer ${timer}..."
+        systemctl --user disable --now "${timer}" 2>/dev/null || true
+        rm -f "${installed}" "${SYSTEMD_USER_DIR}/${timer%.timer}.service"
+    fi
+done
+systemctl --user daemon-reload
 
 # ─── Verify ─────────────────────────────────────────────────────
 sleep 2
