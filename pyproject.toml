@@ -196,3 +196,9 @@ disable_error_code = ["no-any-return", "no-untyped-call", "no-untyped-def", "typ
 [[tool.mypy.overrides]]
 module = ["workflows.morning_briefing.composer"]
 disable_error_code = ["no-any-return", "no-untyped-def", "type-arg"]
+
+# Runtime-only packages that are not installed when CI type-checks (see
+# requirements-dev.txt for the ones that are).
+[[tool.mypy.overrides]]
+module = ["mcp", "mcp.*"]
+ignore_missing_imports = true

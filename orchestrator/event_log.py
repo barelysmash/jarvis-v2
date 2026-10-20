@@ -51,8 +51,12 @@ def process_label() -> str:
     if explicit:
         return explicit
     stem = Path(sys.argv[0]).stem if sys.argv and sys.argv[0] else "python"
-    return {"uvicorn": "api", "trigger_briefing": "briefing",
-            "run_sleep_cycle": "sleep", "run_voice": "voice"}.get(stem, stem)
+    return {
+        "uvicorn": "api",
+        "trigger_briefing": "briefing",
+        "run_sleep_cycle": "sleep",
+        "run_voice": "voice",
+    }.get(stem, stem)
 
 
 def _db_path() -> Path:
@@ -65,6 +69,22 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(str(_db_path()), timeout=5.0)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+@contextlib.contextmanager
+def _db() -> Iterator[sqlite3.Connection]:
+    """Open, commit on success, and always close.
+
+    ``with sqlite3.connect(...) as conn`` only commits; it never closes the
+    connection, which leaks a handle per event and keeps ``events.db``
+    locked on Windows until garbage collection gets around to it.
+    """
+    conn = _connect()
+    try:
+        with conn:
+            yield conn
+    finally:
+        conn.close()
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
@@ -89,22 +109,20 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE tool_events ADD COLUMN pid INTEGER")
     if "proc" not in cols:
         conn.execute("ALTER TABLE tool_events ADD COLUMN proc TEXT")
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_tool_events_ts ON tool_events(ts)"
-    )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_tool_events_ts ON tool_events(ts)")
     conn.commit()
     _schema_ready_for = path
 
 
 def init_db() -> None:
     """Idempotent table creation/migration. Safe to call from any process."""
-    with _connect() as conn:
+    with _db() as conn:
         _ensure_schema(conn)
 
 
 def clip(value: Any, limit: int = MAX_FIELD_CHARS) -> Any:
     """Make a value JSON-safe and bounded for storage."""
-    if value is None or isinstance(value, (bool, int, float)):
+    if value is None or isinstance(value, bool | int | float):
         return value
     if isinstance(value, str):
         text = value
@@ -132,14 +150,13 @@ def emit(source: str, event_type: str, payload: dict[str, Any]) -> int | None:
                 {k: clip(v, MAX_FIELD_CHARS // 2) for k, v in payload.items()},
                 default=str,
             )
-        with _connect() as conn:
+        with _db() as conn:
             _ensure_schema(conn)
             cur = conn.execute(
                 "INSERT INTO tool_events "
                 "(ts, source, event_type, payload, pid, proc) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
-                (time.time(), source, event_type, body,
-                 os.getpid(), process_label()),
+                (time.time(), source, event_type, body, os.getpid(), process_label()),
             )
             conn.commit()
             return cur.lastrowid
@@ -171,7 +188,7 @@ _SELECT = "SELECT id, ts, source, event_type, payload, pid, proc FROM tool_event
 def fetch_since(after_ts: float, limit: int = 100) -> list[dict]:
     """Return events newer than the given timestamp (ascending order)."""
     try:
-        with _connect() as conn:
+        with _db() as conn:
             _ensure_schema(conn)
             rows = conn.execute(
                 f"{_SELECT} WHERE ts > ? ORDER BY ts ASC LIMIT ?",
@@ -186,7 +203,7 @@ def fetch_since(after_ts: float, limit: int = 100) -> list[dict]:
 def fetch_after_id(after_id: int, limit: int = 200) -> list[dict]:
     """Return events with id > after_id (ascending). Gap-free tailing."""
     try:
-        with _connect() as conn:
+        with _db() as conn:
             _ensure_schema(conn)
             rows = conn.execute(
                 f"{_SELECT} WHERE id > ? ORDER BY id ASC LIMIT ?",
@@ -201,7 +218,7 @@ def fetch_after_id(after_id: int, limit: int = 200) -> list[dict]:
 def fetch_tail(limit: int = 500) -> list[dict]:
     """Return the most recent `limit` events in ascending order."""
     try:
-        with _connect() as conn:
+        with _db() as conn:
             _ensure_schema(conn)
             rows = conn.execute(
                 f"{_SELECT} ORDER BY id DESC LIMIT ?", (limit,)
@@ -216,11 +233,9 @@ def prune_older_than(seconds: float = 3600.0) -> int:
     """Delete events older than the given window. Called by the sleep cycle."""
     cutoff = time.time() - seconds
     try:
-        with _connect() as conn:
+        with _db() as conn:
             _ensure_schema(conn)
-            cur = conn.execute(
-                "DELETE FROM tool_events WHERE ts < ?", (cutoff,)
-            )
+            cur = conn.execute("DELETE FROM tool_events WHERE ts < ?", (cutoff,))
             conn.commit()
             return cur.rowcount
     except Exception as e:
@@ -253,16 +268,28 @@ def job(name: str, **detail: Any) -> Iterator[dict[str, Any]]:
     try:
         yield record
     except BaseException as exc:
-        emit("job", "job", {
-            "job": name, "phase": "end", "ok": False,
-            "ms": int((time.time() - started) * 1000),
-            "error": clip(f"{type(exc).__name__}: {exc}", 1000),
-            **record,
-        })
+        emit(
+            "job",
+            "job",
+            {
+                "job": name,
+                "phase": "end",
+                "ok": False,
+                "ms": int((time.time() - started) * 1000),
+                "error": clip(f"{type(exc).__name__}: {exc}", 1000),
+                **record,
+            },
+        )
         raise
     else:
-        emit("job", "job", {
-            "job": name, "phase": "end", "ok": True,
-            "ms": int((time.time() - started) * 1000),
-            **{k: clip(v, 1000) for k, v in record.items()},
-        })
+        emit(
+            "job",
+            "job",
+            {
+                "job": name,
+                "phase": "end",
+                "ok": True,
+                "ms": int((time.time() - started) * 1000),
+                **{k: clip(v, 1000) for k, v in record.items()},
+            },
+        )

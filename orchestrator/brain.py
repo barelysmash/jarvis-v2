@@ -94,7 +94,13 @@ class JarvisBrain:
     ) -> str:
         context = self.memory.retrieve(user_input, k=5)
         from datetime import datetime
-        now_str = datetime.now().strftime("%A, %B %-d, %Y at %-I:%M %p")
+        now = datetime.now()
+        # No %-d / %-I: those are glibc extensions and Windows' strftime
+        # raises on them, which took the test suite down on Rosencrantz.
+        now_str = (
+            f"{now:%A, %B} {now.day}, {now.year} "
+            f"at {now.hour % 12 or 12}:{now:%M %p}"
+        )
         system_prompt = SYSTEM_PROMPT.format(
             user_name=self.user_name,
             memory_context=context,

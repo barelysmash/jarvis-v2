@@ -27,10 +27,14 @@ import json
 import logging
 import os
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from orchestrator.tools import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +73,7 @@ MCP_START_TIMEOUT = 20.0
 # ─── Adapter transport ───────────────────────────────────────
 
 
-def _load_adapter(name: str, spec: dict, tools) -> None:
+def _load_adapter(name: str, spec: dict[str, Any], tools: ToolRegistry) -> None:
     """Import the adapter class and let it register its own tools."""
     module_name = spec["module"]
     class_name = spec["class"]
@@ -89,14 +93,14 @@ class McpStdioAgent:
     submits its call with run_coroutine_threadsafe and blocks on the result.
     """
 
-    def __init__(self, name: str, spec: dict):
+    def __init__(self, name: str, spec: dict[str, Any]):
         self.name = name
         self.command = spec["command"]
         self.args = list(spec.get("args", []))
         self.env_file = spec.get("env_file")
         self.allowed = set(spec.get("tools", []))  # empty set = allow all
         self._loop: asyncio.AbstractEventLoop | None = None
-        self._session = None
+        self._session: Any = None  # mcp.ClientSession once _run() connects
         self._ready = threading.Event()
         self._startup_error: Exception | None = None
         self._discovered: list[Any] = []
@@ -142,19 +146,21 @@ class McpStdioAgent:
         params = StdioServerParameters(
             command=self.command, args=self.args, env=env
         )
-        async with stdio_client(params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                listing = await session.list_tools()
-                self._session = session
-                self._discovered = list(listing.tools)
-                self._ready.set()
-                # Keep the session alive for the life of the process.
-                await asyncio.Event().wait()
+        async with (
+            stdio_client(params) as (read, write),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            listing = await session.list_tools()
+            self._session = session
+            self._discovered = list(listing.tools)
+            self._ready.set()
+            # Keep the session alive for the life of the process.
+            await asyncio.Event().wait()
 
     # -- calling --
 
-    def call(self, tool_name: str, args: dict) -> Any:
+    def call(self, tool_name: str, args: dict[str, Any]) -> Any:
         """Synchronous tool call, run on the agent's loop."""
         if self._session is None or self._loop is None:
             return {"error": f"MCP agent '{self.name}' is not running"}
@@ -180,7 +186,7 @@ class McpStdioAgent:
         except (ValueError, TypeError):
             return payload
 
-    def register_tools(self, tools) -> int:
+    def register_tools(self, tools: ToolRegistry) -> int:
         """Register every discovered (and allowed) tool, prefixed."""
         count = 0
         for tool in self._discovered:
@@ -200,8 +206,8 @@ class McpStdioAgent:
             count += 1
         return count
 
-    def _make_handler(self, tool_name: str):
-        def handler(**kwargs):
+    def _make_handler(self, tool_name: str) -> Callable[..., Any]:
+        def handler(**kwargs: Any) -> Any:
             return self.call(tool_name, kwargs)
 
         return handler
@@ -210,13 +216,15 @@ class McpStdioAgent:
 # ─── Loader ──────────────────────────────────────────────────
 
 
-def load_agents(tools, config_path: str | None = None) -> None:
+def load_agents(tools: ToolRegistry, config_path: str | None = None) -> None:
     """Read agents.yaml and register every satisfiable agent.
 
     Missing config file is not an error (fresh checkout, tests). Each agent
     loads independently; one failure never blocks the rest.
     """
-    path = Path(config_path or os.environ.get("JARVIS_AGENTS_CONFIG", DEFAULT_CONFIG_PATH))
+    path = Path(
+        config_path or os.environ.get("JARVIS_AGENTS_CONFIG", DEFAULT_CONFIG_PATH)
+    )
     if not path.exists():
         print(f"[agents] no registry at {path} — skipping agent load")
         return
