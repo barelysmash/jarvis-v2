@@ -93,7 +93,9 @@ class AgentRegistryTests(unittest.TestCase):
     def test_snapshot_reflects_load_outcomes_in_declaration_order(self):
         self._load()
         snap = agents.registry_snapshot()
-        self.assertEqual([a["name"] for a in snap], ["good", "needs_env", "parked", "broken"])
+        self.assertEqual(
+            [a["name"] for a in snap], ["good", "needs_env", "parked", "broken"]
+        )
         by_name = {a["name"]: a for a in snap}
 
         self.assertEqual(by_name["good"]["status"], "loaded")
@@ -111,7 +113,8 @@ class AgentRegistryTests(unittest.TestCase):
 
         for a in snap:
             self.assertEqual(
-                set(a), {"name", "description", "transport", "status", "reason", "tools"}
+                set(a),
+                {"name", "description", "transport", "status", "reason", "tools"},
             )
 
     def test_tool_ownership_matches_snapshot(self):
