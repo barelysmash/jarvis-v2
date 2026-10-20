@@ -100,7 +100,8 @@ cp deploy/env.template deploy/.env
 Scheduled, unattended jobs are declared in `config/routines.yaml`, rendered
 into systemd user timers by `scripts/gen_routine_units.py`, and run through
 `scripts/run_routine.py` so every run lands in the cockpit. See
-`docs/ROUTINES.md`. The first routine is the nightly JAM `conformance-sweep`.
+`docs/ROUTINES.md` for the mechanism and `docs/LOOPS.md` for the plan it
+serves. The first routine is the nightly JAM `conformance-sweep`.
 
 ## Architecture
 

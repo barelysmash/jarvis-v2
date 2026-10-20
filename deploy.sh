@@ -44,6 +44,12 @@ git push
 echo "==> Pulling on guildenstern..."
 ssh "$HOST" "cd $REMOTE_DIR && git pull --ff-only"
 
+# --- Routine timers ---
+# config/routines.yaml -> deploy/systemd/jarvis-routine-* were just pulled;
+# sync the user's systemd timers to them (install, enable, retire orphans).
+echo "==> Installing routine timers..."
+ssh "$HOST" "cd $REMOTE_DIR && bash scripts/install_routine_units.sh"
+
 # --- Ship the built dist ---
 if [[ $BUILD -eq 1 ]]; then
   echo "==> Deploying hud/dist..."

@@ -372,3 +372,91 @@ class SweepDiffTests(_TempData):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@unittest.skipUnless(os.name == "posix", "bash script; runs where it is deployed")
+class InstallUnitsScriptTests(_TempData):
+    """scripts/install_routine_units.sh against a fake systemctl.
+
+    The fake logs every call and the test reads the log back, so the
+    install / enable / disable / orphan sequence is pinned without systemd.
+    """
+
+    SCRIPT = REPO / "scripts" / "install_routine_units.sh"
+
+    def _run(self, checkout: Path, unit_dir: Path) -> tuple[str, list[str]]:
+        log = Path(self.tmp.name) / "systemctl.log"
+        fake = Path(self.tmp.name) / "fake-systemctl"
+        fake.write_text(
+            f'#!/usr/bin/env bash\necho "$*" >> "{log}"\n', encoding="utf-8"
+        )
+        fake.chmod(0o755)
+        proc = subprocess.run(
+            ["bash", str(self.SCRIPT), str(checkout)],
+            env={
+                **os.environ,
+                "JARVIS_SYSTEMD_USER_DIR": str(unit_dir),
+                "JARVIS_SYSTEMCTL": str(fake),
+            },
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        calls = log.read_text().splitlines() if log.exists() else []
+        return proc.stdout, calls
+
+    def _checkout(self, units: dict[str, str]) -> Path:
+        checkout = Path(self.tmp.name) / "checkout"
+        (checkout / "deploy" / "systemd").mkdir(parents=True)
+        for name, body in units.items():
+            (checkout / "deploy" / "systemd" / name).write_text(body)
+        return checkout
+
+    def test_installs_and_enables(self) -> None:
+        checkout = self._checkout(
+            {
+                "jarvis-routine-a.service": "[Service]\n",
+                "jarvis-routine-a.timer": "[Timer]\n",
+            }
+        )
+        unit_dir = Path(self.tmp.name) / "units"
+        out, calls = self._run(checkout, unit_dir)
+        self.assertTrue((unit_dir / "jarvis-routine-a.service").is_file())
+        self.assertTrue((unit_dir / "jarvis-routine-a.timer").is_file())
+        self.assertEqual(
+            calls,
+            ["--user daemon-reload", "--user enable --now jarvis-routine-a.timer"],
+        )
+        self.assertIn("2 unit file(s) installed, 0 orphan(s) removed", out)
+
+    def test_disabled_marker_and_orphan(self) -> None:
+        checkout = self._checkout(
+            {
+                "jarvis-routine-b.service": "[Service]\n",
+                "jarvis-routine-b.timer": "# jarvis-routine-enabled: false\n[Timer]\n",
+            }
+        )
+        unit_dir = Path(self.tmp.name) / "units"
+        unit_dir.mkdir()
+        (unit_dir / "jarvis-routine-old.timer").write_text("[Timer]\n")
+        (unit_dir / "jarvis-routine-old.service").write_text("[Service]\n")
+        out, calls = self._run(checkout, unit_dir)
+        self.assertFalse((unit_dir / "jarvis-routine-old.timer").exists())
+        self.assertFalse((unit_dir / "jarvis-routine-old.service").exists())
+        self.assertEqual(
+            calls,
+            [
+                "--user disable --now jarvis-routine-old.timer",
+                "--user daemon-reload",
+                "--user disable --now jarvis-routine-b.timer",
+            ],
+        )
+        self.assertIn("1 orphan(s) removed", out)
+
+    def test_committed_units_install_cleanly(self) -> None:
+        unit_dir = Path(self.tmp.name) / "units"
+        _, calls = self._run(REPO, unit_dir)
+        self.assertIn(
+            "--user enable --now jarvis-routine-conformance-sweep.timer", calls
+        )

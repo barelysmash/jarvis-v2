@@ -47,7 +47,7 @@ Operational Intelligence      Trading Intelligence
         `conformance-sweep`, nightly `jam validate` across atlas + jarvis-v2
         with drift events into the cockpit.
       - [ ] Contract propagation routine: JAM release → version-bump branches
-        in every conforming repo (stops before merge)
+        in every conforming repo (stops before merge) — see docs/LOOPS.md
       - [x] `/api/events` endpoint for proactive triggers (cockpit, v2.17)
       - [ ] Feed `/api/events` from Friday/BarelyTrade Events and OpenClaw
 
