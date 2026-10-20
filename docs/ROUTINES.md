@@ -26,8 +26,12 @@ of unit files and a deploy-config edit.
 2. Declare it in `config/routines.yaml` (fields are documented in the file).
 3. `py scripts/gen_routine_units.py` and commit the generated units. CI
    runs `--check`, so a registry edit without a regenerate fails the build.
-4. Deploy. `remote_install.sh` installs and enables the timer. The cockpit's
-   Scheduled pane picks it up with no further wiring, including **run now**.
+4. Deploy. Both deploy paths run `scripts/install_routine_units.sh` on
+   guildenstern (`./deploy.sh` after its pull, `deploy/remote_install.sh`
+   after the release swap): units are copied into `~/.config/systemd/user/`,
+   timers enabled or disabled per the registry, and timers whose entry was
+   removed are retired. The cockpit's Scheduled pane picks it up with no
+   further wiring, including **run now**.
 
 To try one before its timer fires:
 
