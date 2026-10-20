@@ -78,7 +78,9 @@ jarvis/
 ├── server/              # FastAPI WebSocket server
 ├── hud/                 # Electron + React frontend
 ├── scripts/             # Entry points & utilities
-├── deploy/              # Deployment pipeline
+│   └── routines/        # Scheduled jobs declared in config/routines.yaml
+├── config/              # agents.yaml, routines.yaml, voice.yaml
+├── deploy/              # Deployment pipeline (+ generated systemd units)
 └── data/                # Persistent state (gitignored)
 ```
 
@@ -92,6 +94,13 @@ cp deploy/env.template deploy/.env
 # fill in deploy/.env
 ./deploy/deploy.sh
 ```
+
+## Routines
+
+Scheduled, unattended jobs are declared in `config/routines.yaml`, rendered
+into systemd user timers by `scripts/gen_routine_units.py`, and run through
+`scripts/run_routine.py` so every run lands in the cockpit. See
+`docs/ROUTINES.md`. The first routine is the nightly JAM `conformance-sweep`.
 
 ## Architecture
 

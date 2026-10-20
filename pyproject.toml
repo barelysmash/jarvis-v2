@@ -50,6 +50,11 @@ python_version = "3.12"
 strict = true
 warn_unreachable = true
 
+# Third-party packages without stubs (CI installs no stub packages).
+[[tool.mypy.overrides]]
+module = ["yaml", "yaml.*"]
+ignore_missing_imports = true
+
 # Legacy debt captured during JAM adoption.
 # New modules receive strict mypy with no exemptions.
 

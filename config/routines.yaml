@@ -1,0 +1,48 @@
+# JARVIS routine registry — the time-based loop.
+#
+# Every unattended, scheduled job JARVIS runs is declared here. Nothing is
+# scheduled by hand-written units any more: scripts/gen_routine_units.py
+# renders one `jarvis-routine-<name>.service` + `.timer` pair per entry into
+# deploy/systemd/, remote_install.sh enables every `jarvis-routine-*.timer`
+# it finds, and the cockpit's Scheduled pane lists them automatically.
+#
+# Lifecycle of a run:
+#   timer fires -> scripts/run_routine.py <name> -> event_log.job(<name>)
+#   -> the routine's script runs with a hard timeout -> stdout/stderr land
+#   in $JARVIS_DATA_DIR/routines/<name>/runs/ -> last stdout line becomes
+#   the job summary the cockpit shows.
+#
+# Fields:
+#   description:      one line; becomes the unit Description
+#   schedule:         systemd OnCalendar expression (local time on the host)
+#   kind:             shell — a script run as a subprocess, no brain, no
+#                     shared session. (`goal` is reserved for the GoalRunner:
+#                     a fresh, isolated brain session per run. Not built yet.)
+#   script:           repository-relative path, run with the jarvis venv python
+#   args:             argv appended to the script
+#   timeout_minutes:  hard kill; mirrored into the unit as TimeoutStartSec
+#   jitter_seconds:   RandomizedDelaySec on the timer (default 0)
+#   enabled:          false renders the units but leaves the timer disabled
+#
+# After editing this file:  py scripts/gen_routine_units.py   (then commit
+# the regenerated units; CI runs the same script with --check).
+
+routines:
+
+  conformance-sweep:
+    description: >
+      Nightly JAM conformance sweep: clone every conforming repo, run
+      `jam validate --json`, diff against the previous run, report drift.
+    schedule: "Mon..Fri 05:30:00"
+    kind: shell
+    script: scripts/routines/conformance_sweep.py
+    args:
+      - --jam-ref
+      - main
+      - --repo
+      - atlas=https://github.com/barelysmash/atlas
+      - --repo
+      - jarvis-v2=https://github.com/barelysmash/jarvis-v2
+    timeout_minutes: 30
+    jitter_seconds: 120
+    enabled: true
