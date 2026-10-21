@@ -40,9 +40,11 @@ Operational Intelligence      Trading Intelligence
 - [ ] **Loop automation** — Jarvis runs tasks unattended:
       - Session isolation per routine run (fresh conversation, never the shared
         singleton — non-negotiable for unattended operation)
-      - [ ] GoalRunner — designed in docs/adr/ADR-0002-goal-runner.md
-        (condition command is the evaluator, no model-as-judge; isolated
-        loop, not the shared brain; protected paths; stop-before-push)
+      - [x] GoalRunner — built per docs/adr/ADR-0002-goal-runner.md
+        (`orchestrator/goal_runner.py`, `kind: goal`) — DONE 2026-10-21
+      - [ ] Probe `jarvis-memory-mypy` on guildenstern, then flip
+        `enabled: true` in routines.yaml for the first scheduled run
+      - [ ] Loop 4: backlog drain (TASKS.md item → goal entry → run)
       - [x] `routines.yaml` scheduled via systemd timers — DONE 2026-10-20
         (`config/routines.yaml` → generated `jarvis-routine-*` units,
         `scripts/run_routine.py`, `docs/ROUTINES.md`). First routine:

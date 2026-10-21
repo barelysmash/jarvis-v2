@@ -16,10 +16,13 @@
 #   description:      one line; becomes the unit Description
 #   schedule:         systemd OnCalendar expression (local time on the host)
 #   kind:             shell — a script run as a subprocess, no brain, no
-#                     shared session. (`goal` is reserved for the GoalRunner:
-#                     a fresh, isolated brain session per run. Not built yet.)
-#   script:           repository-relative path, run with the jarvis venv python
-#   args:             argv appended to the script
+#                     shared session.
+#                     goal  — run-to-green (ADR-0002): the goal runner iterates
+#                     on `repo` until `condition` exits 0, then hands off a
+#                     branch + patch. Fields: repo, base, condition, commands,
+#                     paths, setup, unprotect, budget, max_changed_lines, model.
+#   script:           (shell) repository-relative path, run with the jarvis venv
+#   args:             (shell) argv appended to the script
 #   timeout_minutes:  hard kill; mirrored into the unit as TimeoutStartSec
 #   jitter_seconds:   RandomizedDelaySec on the timer (default 0)
 #   enabled:          false renders the units but leaves the timer disabled
@@ -48,3 +51,31 @@ routines:
     timeout_minutes: 30
     jitter_seconds: 120
     enabled: true
+
+  jarvis-memory-mypy:
+    description: >
+      Run-to-green (ADR-0002): make orchestrator/memory pass mypy --strict with
+      the runtime packages installed — the chromadb typing debt CI cannot see.
+      Prepares goal/jarvis-memory-mypy + a patch; never pushes.
+    schedule: "Sat 06:00:00"
+    kind: goal
+    repo: https://github.com/barelysmash/jarvis-v2
+    base: main
+    setup:
+      - python -m pip install --quiet --upgrade pip
+      - python -m pip install --quiet -r requirements-dev.txt -r requirements.txt
+    condition: python -m mypy --strict orchestrator/memory
+    commands:
+      mypy: python -m mypy --strict orchestrator/memory
+      tests: python -m pytest -q tests
+    paths:
+      - orchestrator/memory/**
+    budget: {iterations: 10, minutes: 20, tokens: 400000}
+    max_changed_lines: 200
+    timeout_minutes: 25
+    jitter_seconds: 120
+    # Installed by deploy, not scheduled until a probe on guildenstern looks
+    # right (runs setup + condition only, no model):
+    #   ssh ocelia@guildenstern 'cd ~/jarvis && JARVIS_DATA_DIR=~/jarvis-data \
+    #     ~/jarvis-venv/bin/python orchestrator/goal_runner.py jarvis-memory-mypy --probe'
+    enabled: false

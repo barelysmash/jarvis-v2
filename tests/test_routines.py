@@ -117,7 +117,7 @@ class RegistryTests(_TempData):
 
     def test_rejections(self) -> None:
         cases = {
-            "reserved kind": """
+            "goal without its fields": """
                 routines:
                   x: {description: d, schedule: s, kind: goal, script: s.py}
                 """,

@@ -1,6 +1,6 @@
 # ADR-0002: Goal Runner (run-to-green)
 
-Status: Proposed
+Status: Accepted
 Date: 2026-10-21
 
 ## Context
@@ -68,7 +68,7 @@ Tools, all scoped to the run's checkout:
 There is no arbitrary shell. Commands the proposer may run are declared by
 name in the registry (`commands:`), and the condition is always among them.
 
-### 3. Where it edits
+### 3. Where it edits, and what it runs with
 
 Each goal routine owns a checkout under its state dir:
 `~/jarvis-data/routines/<name>/repo/`, a shallow clone of the target at its
@@ -76,6 +76,11 @@ base branch, reset to the tip at the start of every run (HEAD detached, as
 the sweep does). The run works on branch `goal/<name>` from that tip.
 Nothing outside that directory is writable; the deployed JARVIS checkout
 and the sweep's checkouts are not involved.
+
+Each routine also owns a private interpreter, `~/jarvis-data/routines/<name>/venv/`.
+`setup`, the condition and every named command run with that venv first on
+PATH, so `python` means the routine's interpreter and `pip install` in a
+`setup` step can never reach the production `jarvis-venv`.
 
 ### 4. What it may not touch
 

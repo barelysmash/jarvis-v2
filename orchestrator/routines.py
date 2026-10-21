@@ -35,8 +35,16 @@ import yaml
 
 DEFAULT_CONFIG_PATH: Final[str] = "config/routines.yaml"
 UNIT_PREFIX: Final[str] = "jarvis-routine-"
-KINDS: Final[frozenset[str]] = frozenset({"shell"})
-RESERVED_KINDS: Final[frozenset[str]] = frozenset({"goal"})
+KINDS: Final[frozenset[str]] = frozenset({"shell", "goal"})
+RESERVED_KINDS: Final[frozenset[str]] = frozenset()
+
+# kind: goal defaults (ADR-0002 §5, §4).
+GOAL_BUDGET_DEFAULTS: Final[dict[str, int]] = {
+    "iterations": 10,
+    "minutes": 20,
+    "tokens": 400_000,
+}
+GOAL_MAX_CHANGED_LINES: Final[int] = 400
 
 # A routine name is a unit-file stem, a directory name and a cockpit label,
 # so keep it to the characters all three agree on.
@@ -45,6 +53,22 @@ NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9][a-z0-9-]{0,47}$")
 
 class RoutineConfigError(ValueError):
     """The routine registry is malformed."""
+
+
+@dataclass(frozen=True, slots=True)
+class GoalSpec:
+    """The ``kind: goal`` half of a routine (ADR-0002 §7)."""
+
+    repo: str
+    base: str
+    condition: str
+    commands: dict[str, str]  # name -> command; always includes "condition"
+    paths: tuple[str, ...]  # globs the proposer may write within
+    setup: tuple[str, ...] = ()  # once per fresh checkout
+    unprotect: tuple[str, ...] = ()  # globs removed from the protected set
+    budget: dict[str, int] = field(default_factory=lambda: dict(GOAL_BUDGET_DEFAULTS))
+    max_changed_lines: int = GOAL_MAX_CHANGED_LINES
+    model: str | None = None  # proposer model; None = runner default
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +85,7 @@ class Routine:
     jitter_seconds: int = 0
     enabled: bool = True
     extra: dict[str, Any] = field(default_factory=dict)
+    goal: GoalSpec | None = None  # populated when kind == "goal"
 
     @property
     def service_name(self) -> str:
@@ -126,7 +151,15 @@ def _parse_routine(name: str, spec: object, config_path: Path) -> Routine:
             f"{where}: kind must be one of {sorted(KINDS)}, got '{kind}'"
         )
 
-    script = _required_str(spec, "script", where)
+    goal: GoalSpec | None = None
+    if kind == "goal":
+        goal = _parse_goal(spec, where)
+        # A goal routine is driven by the runner, not a script of its own;
+        # run_routine.py dispatches on kind. `script` names the runner so the
+        # unit and --dry-run output stay truthful.
+        script = str(spec.get("script") or "orchestrator/goal_runner.py")
+    else:
+        script = _required_str(spec, "script", where)
     if (
         PurePosixPath(script).is_absolute()
         or PureWindowsPath(script).is_absolute()
@@ -140,6 +173,8 @@ def _parse_routine(name: str, spec: object, config_path: Path) -> Routine:
     args_raw = spec.get("args", [])
     if args_raw is None:
         args_raw = []
+    if kind == "goal" and not args_raw:
+        args_raw = [name]  # the runner takes the routine name
     if not isinstance(args_raw, list) or not all(
         isinstance(a, str | int | float) for a in args_raw
     ):
@@ -166,8 +201,15 @@ def _parse_routine(name: str, spec: object, config_path: Path) -> Routine:
         "timeout_minutes",
         "jitter_seconds",
         "enabled",
+        *GOAL_KEYS,
     }
     extra = {k: v for k, v in spec.items() if k not in known}
+
+    if goal is not None and timeout <= goal.budget["minutes"]:
+        raise RoutineConfigError(
+            f"{where}: timeout_minutes ({timeout}) must exceed budget.minutes "
+            f"({goal.budget['minutes']}) so systemd never wins the race"
+        )
 
     return Routine(
         name=name,
@@ -180,6 +222,104 @@ def _parse_routine(name: str, spec: object, config_path: Path) -> Routine:
         jitter_seconds=jitter,
         enabled=enabled,
         extra=extra,
+        goal=goal,
+    )
+
+
+GOAL_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "repo",
+        "base",
+        "condition",
+        "commands",
+        "paths",
+        "setup",
+        "unprotect",
+        "budget",
+        "max_changed_lines",
+        "model",
+    }
+)
+
+
+def _str_list(spec: dict[str, Any], key: str, where: str) -> tuple[str, ...]:
+    raw = spec.get(key, [])
+    if raw is None:
+        return ()
+    if not isinstance(raw, list) or not all(
+        isinstance(x, str) and x.strip() for x in raw
+    ):
+        raise RoutineConfigError(
+            f"{where}: '{key}' must be a list of non-empty strings"
+        )
+    return tuple(x.strip() for x in raw)
+
+
+def _parse_goal(spec: dict[str, Any], where: str) -> GoalSpec:
+    repo = _required_str(spec, "repo", where)
+    base = str(spec.get("base") or "main").strip()
+    condition = _required_str(spec, "condition", where)
+
+    commands_raw = spec.get("commands") or {}
+    if not isinstance(commands_raw, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) and v.strip()
+        for k, v in commands_raw.items()
+    ):
+        raise RoutineConfigError(f"{where}: 'commands' must map names to commands")
+    commands = {str(k): str(v).strip() for k, v in commands_raw.items()}
+    if "condition" in commands and commands["condition"] != condition:
+        raise RoutineConfigError(
+            f"{where}: commands.condition must equal 'condition' (or be omitted)"
+        )
+    commands["condition"] = condition
+    for cmd_name in commands:
+        if not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", cmd_name):
+            raise RoutineConfigError(
+                f"{where}: command name '{cmd_name}' must be lowercase/digits/-/_"
+            )
+
+    paths = _str_list(spec, "paths", where)
+    if not paths:
+        raise RoutineConfigError(
+            f"{where}: 'paths' (globs the proposer may write) is required"
+        )
+    for pattern in (*paths, *_str_list(spec, "unprotect", where)):
+        if pattern.startswith("/") or ".." in PurePosixPath(pattern).parts:
+            raise RoutineConfigError(
+                f"{where}: path glob must be repo-relative: {pattern}"
+            )
+
+    budget = dict(GOAL_BUDGET_DEFAULTS)
+    budget_raw = spec.get("budget") or {}
+    if not isinstance(budget_raw, dict):
+        raise RoutineConfigError(f"{where}: 'budget' must be a mapping")
+    for key, value in budget_raw.items():
+        if key not in GOAL_BUDGET_DEFAULTS:
+            raise RoutineConfigError(
+                f"{where}: unknown budget key '{key}' "
+                f"(want {sorted(GOAL_BUDGET_DEFAULTS)})"
+            )
+        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+            raise RoutineConfigError(f"{where}: budget.{key} must be an integer >= 1")
+        budget[str(key)] = value
+
+    max_lines = _int_field(
+        spec, "max_changed_lines", GOAL_MAX_CHANGED_LINES, where, minimum=1
+    )
+    model_raw = spec.get("model")
+    model = str(model_raw).strip() if model_raw else None
+
+    return GoalSpec(
+        repo=repo,
+        base=base,
+        condition=condition,
+        commands=commands,
+        paths=paths,
+        setup=_str_list(spec, "setup", where),
+        unprotect=_str_list(spec, "unprotect", where),
+        budget=budget,
+        max_changed_lines=max_lines,
+        model=model,
     )
 
 
