@@ -9,7 +9,7 @@ covers the mechanism the time-based loop runs on; this page is the plan.
 |---|------|-----------|--------|
 | 1 | **Conformance sweep** — clone every conforming repo, run `jam validate --json`, diff against the previous sweep, emit drift to the cockpit. Read-only. | time-based (`config/routines.yaml` → systemd timer on guildenstern) | **Live.** Routine `conformance-sweep`, weekdays 05:30. |
 | 2 | **Contract propagation** — a new JAM release tag fans out an adoption branch (`jam.yaml` pin, re-vendored schemas, `VERSION` note) to every conforming repo that is behind, and stops before push. Landing it is `git am` + the repo's `ship.sh`. | polled from the sweep (the tag list is already in hand; no new ingress) | **Live**, stop-before-push. `--push` exists but is off until the sweep is given write credentials. |
-| 3 | **Run-to-green** — iterate on one repo (edit, run, read the failure, edit) until an evaluator says the stated condition holds — `jam validate` 11/11, mypy strict clean — or a budget runs out, then hand off a branch. | goal-based (`kind: goal` in `routines.yaml`, reserved for the GoalRunner) | Not started. Needs the GoalRunner and session isolation from TASKS.md. |
+| 3 | **Run-to-green** — iterate on one repo (edit, run the condition, read the failure, edit) until the condition command exits 0 or a budget runs out, then hand off a branch. | goal-based (`kind: goal` in `routines.yaml`) | **Designed**: `docs/adr/ADR-0002-goal-runner.md`. Not built. |
 | 4 | **Backlog drain** — on a schedule, pick the next unblocked TASKS.md item and spawn a run-to-green for it. | time-based → goal-based | Not started. This is the cockpit's scheduler; it falls out of 1–3. |
 
 ## Rules every loop follows
