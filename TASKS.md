@@ -55,7 +55,7 @@ Operational Intelligence      Trading Intelligence
       - [ ] Feed `/api/events` from Friday/BarelyTrade Events and OpenClaw
 
 ## Quality of life
-- [ ] ssh-agent setup on rosencrantz (kill the 5x passphrase prompts per deploy)
+- [x] ssh-agent setup on rosencrantz (kill the 5x passphrase prompts per deploy) — DONE 2026-10-21 (~/.bashrc agent block + AddKeysToAgent in ~/.ssh/config; ControlMaster is unreliable on MSYS)
 - [ ] Find where uvicorn logs actually go (not journald; check ~/jarvis-data/logs/)
 - [ ] Rename `tools/integrations/calendar.py` → `gcal.py` (stdlib shadow;
       caused the reauth-script import crash). Touches imports in tools.py.
