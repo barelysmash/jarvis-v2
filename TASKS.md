@@ -46,8 +46,11 @@ Operational Intelligence      Trading Intelligence
         `scripts/run_routine.py`, `docs/ROUTINES.md`). First routine:
         `conformance-sweep`, nightly `jam validate` across atlas + jarvis-v2
         with drift events into the cockpit.
-      - [ ] Contract propagation routine: JAM release → version-bump branches
-        in every conforming repo (stops before merge) — see docs/LOOPS.md
+      - [x] Contract propagation: JAM release → `chore/jam-vX.Y.Z` branch +
+        patch prepared in every conforming repo behind it (stops before
+        push) — DONE 2026-10-20, in the sweep; see docs/ROUTINES.md
+      - [ ] Decide whether the sweep gets write creds on guildenstern
+        (`--push`: pushes the branch and opens the PR; merge stays manual)
       - [x] `/api/events` endpoint for proactive triggers (cockpit, v2.17)
       - [ ] Feed `/api/events` from Friday/BarelyTrade Events and OpenClaw
 

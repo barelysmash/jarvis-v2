@@ -8,8 +8,16 @@
 For every ``--repo name=url[@branch]``: shallow-clone or fast-forward it
 under the routine's state directory, run ``jam validate --json`` against it
 with the pinned jam-sdk, and diff the result against the previous sweep.
-Nothing is ever written to a repository; the sweep *consumes* JAM, it does
-not propose changes to it.
+The sweep *consumes* JAM; it never proposes changes to JAM itself.
+
+It also watches JAM for releases (loop #2, ``jam_release.py``): the newest
+``vX.Y.Z`` tag is compared with each repo's ``jam.yaml`` pin. With
+``--propagate``, a repo that is behind gets a ``chore/jam-vX.Y.Z`` branch
+prepared in its checkout — manifest pin bumped, vendored schemas refreshed,
+VERSION note rewritten — plus a ``.patch`` under ``propagation/``. That is
+where an unattended run stops. ``--push`` (needs write credentials and an
+authenticated ``gh`` on the host) additionally pushes the branch and opens
+a pull request; merging is always left to the repo's ``ship.sh``.
 
 What comes out:
 
@@ -20,6 +28,9 @@ What comes out:
   changed (``kind: regression`` if anything went green→red, else
   ``kind: drift``), so the cockpit's Agents & changes pane and the HUD
   see it;
+* ``kind: release`` once per new JAM tag, ``kind: behind`` when a repo's
+  pin falls behind it, ``kind: propagation`` when a branch is prepared or
+  a PR opened;
 * a one-line summary as the last line of stdout, which
   ``run_routine.py`` lifts into the job summary.
 
@@ -31,7 +42,11 @@ State layout (``$JARVIS_ROUTINE_STATE``, set by run_routine.py)::
 
     jam-venv/          dedicated venv holding barelysmash-jam-sdk
     jam-venv/.jam-commit   the JAM commit the installed sdk came from
-    repos/<name>/      shallow checkouts
+    jam/               tag-only JAM checkout (manifests + schemas by tag)
+    jam-release.json   last seen release and per-repo pins
+    repos/<name>/      shallow checkouts, HEAD detached at the tip;
+                       prepared chore/jam-* branches live here
+    propagation/       <repo>-jam-vX.Y.Z.patch for prepared branches
     history/<name>/    previous reports
     report.json        this run
 """
@@ -39,6 +54,7 @@ State layout (``$JARVIS_ROUTINE_STATE``, set by run_routine.py)::
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -57,6 +73,7 @@ sys.path.insert(
 
 from orchestrator import event_log
 from orchestrator.routines import routine_state_dir
+from scripts.routines import jam_release
 
 ROUTINE: Final[str] = "conformance-sweep"
 DEFAULT_JAM_SOURCE: Final[str] = "https://github.com/barelysmash/JAM"
@@ -104,6 +121,8 @@ class RepoResult:
     removed: list[str] = field(default_factory=list)
     previous_commit: str = ""
     error: str = ""
+    pin: dict[str, Any] = field(default_factory=dict)
+    propagation: dict[str, Any] = field(default_factory=dict)
 
     @property
     def changed(self) -> bool:
@@ -228,6 +247,9 @@ def sync_repo(repos_dir: Path, spec: RepoSpec) -> tuple[Path, str]:
     if (path / ".git").is_dir():
         target = branch or "HEAD"
         sh(["git", "fetch", "--depth", "1", "--quiet", "origin", target], cwd=path)
+        # Detach before resetting so a prepared chore/jam-* branch is never
+        # the one that gets moved to the new tip.
+        sh(["git", "checkout", "--quiet", "--detach"], cwd=path, check=False)
         sh(["git", "reset", "--quiet", "--hard", "FETCH_HEAD"], cwd=path)
         sh(["git", "clean", "-fdq"], cwd=path)
     else:
@@ -237,6 +259,7 @@ def sync_repo(repos_dir: Path, spec: RepoSpec) -> tuple[Path, str]:
             cmd += ["--branch", branch]
         cmd += [spec.url, str(path)]
         sh(cmd)
+        sh(["git", "checkout", "--quiet", "--detach"], cwd=path)
     sha = sh(["git", "rev-parse", "--short", "HEAD"], cwd=path).stdout.strip()
     return path, sha
 
@@ -372,25 +395,255 @@ def print_result(result: RepoResult) -> None:
     for name, ok in result.checks.items():
         if not ok:
             print(f"    ✗ {name}: {result.messages.get(name, '')}")
+    if result.pin:
+        print(f"    {pin_summary(result)}")
 
 
-def one_liner(results: list[RepoResult], jam_commit: str) -> str:
+def pin_summary(result: RepoResult) -> str:
+    pin = result.pin
+    if pin.get("error"):
+        return f"pin: {pin['error']}"
+    pinned, latest = pin.get("pinned"), pin.get("latest")
+    if pinned is None:
+        return "pin: jam.yaml has no manual_version"
+    if not pin.get("behind"):
+        return f"pin v{pinned} (latest)"
+    text = f"pin v{pinned} → v{latest} BEHIND"
+    prop = result.propagation
+    if prop.get("error"):
+        text += f"; propagation failed: {prop['error']}"
+    elif prop.get("pr_url"):
+        text += f"; PR {prop['pr_url']}"
+    elif prop.get("commit"):
+        patch_name = Path(prop["patch"]).name
+        text += f"; {prop['branch']} ready ({prop['commit']}, patch {patch_name})"
+    if pin.get("diverged"):
+        text += "; diverged, left alone: " + ", ".join(pin["diverged"])
+    return text
+
+
+def one_liner(
+    results: list[RepoResult], jam_commit: str, release_tag: str | None = None
+) -> str:
     parts = []
     for r in results:
         if r.error:
             parts.append(f"{r.name} ERR")
             continue
         flag = "=" if not r.changed else ("▲" if r.regressed else "△")
-        parts.append(f"{r.name} {r.score} ({flag})")
-    return " · ".join(parts) + f" · jam@{jam_commit[:7]}"
+        bit = f"{r.name} {r.score} ({flag})"
+        if r.pin.get("behind"):
+            prop = r.propagation
+            if prop.get("pr_url"):
+                bit += " PR open"
+            elif prop.get("commit"):
+                bit += " branch ready"
+            else:
+                bit += " behind"
+        parts.append(bit)
+    tail = f"jam {release_tag}" if release_tag else f"jam@{jam_commit[:7]}"
+    return " · ".join(parts) + f" · {tail}"
+
+
+# ─── JAM releases (loop #2) ──────────────────────────────────
+
+
+def load_release_state(state: Path) -> dict[str, Any]:
+    path = state / "jam-release.json"
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def save_release_state(state: Path, data: dict[str, Any]) -> None:
+    (state / "jam-release.json").write_text(
+        json.dumps(data, indent=2, sort_keys=True), encoding="utf-8"
+    )
+
+
+def emit_release(release: jam_release.Release, previous_tag: str | None) -> None:
+    event_log.emit(
+        ROUTINE,
+        "agent",
+        {
+            "agent": ROUTINE,
+            "kind": "release",
+            "severity": "notice",
+            "summary": (
+                f"JAM {release.tag} released"
+                + (f" (was {previous_tag})" if previous_tag else "")
+                + ": "
+                + ", ".join(
+                    f"{k} {v}" for k, v in sorted(release.schema_versions.items())
+                )
+            ),
+            "data": {
+                "tag": release.tag,
+                "previous": previous_tag,
+                "schemas": release.schema_versions,
+            },
+        },
+    )
+
+
+def emit_pin(result: RepoResult, release: jam_release.Release) -> None:
+    pin, prop = result.pin, result.propagation
+    if prop.get("error"):
+        kind, severity = "propagation", "warning"
+        summary = (
+            f"{result.name}: could not prepare {release.tag} — {prop['error'][:300]}"
+        )
+    elif prop.get("pr_url"):
+        kind, severity = "propagation", "notice"
+        summary = f"{result.name}: PR for {release.tag} open — {prop['pr_url']}"
+    elif prop.get("commit"):
+        kind, severity = "propagation", "notice"
+        summary = (
+            f"{result.name}: {prop['branch']} ready ({prop['commit']}); "
+            f"patch {Path(prop['patch']).name}"
+        )
+    elif pin.get("behind"):
+        kind, severity = "behind", "notice"
+        summary = f"{result.name}: pins JAM v{pin['pinned']}, latest is {release.tag}"
+    else:
+        return
+    event_log.emit(
+        ROUTINE,
+        "agent",
+        {
+            "agent": ROUTINE,
+            "kind": kind,
+            "severity": severity,
+            "summary": summary,
+            "data": {"repo": result.name, "pin": pin, "propagation": prop},
+        },
+    )
+
+
+def track_release(
+    specs: list[RepoSpec],
+    results: list[RepoResult],
+    *,
+    state: Path,
+    jam_source: str,
+    propagate: bool,
+    push: bool,
+) -> jam_release.Release | None:
+    """Detect the newest JAM release, compare every synced repo's pin to it,
+    and (optionally) prepare adoption branches. Events fire only when
+    something is new: a tag, a pin falling behind, a branch prepared."""
+
+    release = jam_release.latest_release(jam_source, state)
+    if release is None:
+        print("JAM has no release tags; skipping release tracking")
+        return None
+    jam_dir = state / "jam"
+    patch_dir = state / "propagation"
+    stored = load_release_state(state)
+    previous_tag = stored.get("tag")
+    print(
+        f"JAM latest release {release.tag}"
+        + (
+            f" (was {previous_tag})"
+            if previous_tag and previous_tag != release.tag
+            else ""
+        )
+    )
+    if previous_tag != release.tag:
+        emit_release(release, previous_tag)
+
+    seen_repos: dict[str, Any] = (
+        dict(stored.get("repos", {})) if isinstance(stored.get("repos"), dict) else {}
+    )
+    for spec, result in zip(specs, results, strict=True):
+        if result.error or not result.commit:
+            continue
+        repo_path = state / "repos" / spec.name
+        try:
+            status = jam_release.inspect_pin(spec.name, repo_path, release, jam_dir)
+        except jam_release.ReleaseError as exc:
+            result.pin = {"error": str(exc), "latest": release.version}
+            continue
+        result.pin = {
+            "pinned": status.pinned,
+            "latest": release.version,
+            "behind": status.behind,
+            "vendored": sorted(status.vendored),
+            "diverged": status.diverged,
+            "version_notes": status.version_notes,
+            "error": status.error,
+        }
+        if status.behind and propagate and not status.error:
+            pinned_release: jam_release.Release | None = None
+            if status.pinned_tag:
+                try:
+                    pinned_release = jam_release.load_release(
+                        jam_dir, status.pinned_tag
+                    )
+                except jam_release.ReleaseError:
+                    pinned_release = None
+            prop = jam_release.propagate(
+                status,
+                release,
+                repo_path=repo_path,
+                jam_dir=jam_dir,
+                patch_dir=patch_dir,
+                push=push,
+                previous=pinned_release,
+            )
+            result.propagation = {
+                "branch": prop.branch,
+                "base": prop.base,
+                "commit": prop.commit,
+                "tree": prop.tree,
+                "changed": prop.changed,
+                "unchanged_schemas": prop.unchanged_schemas,
+                "patch": prop.patch,
+                "pushed": prop.pushed,
+                "pr_url": prop.pr_url,
+                "error": prop.error,
+            }
+        elif not status.behind:
+            with contextlib.suppress(jam_release.ReleaseError):
+                jam_release.cleanup_branches(repo_path, None, patch_dir, spec.name)
+
+        # What counts as "new" for the cockpit: the pin pair, the prepared
+        # content (tree, not commit — the branch is rebuilt nightly with a
+        # fresh timestamp), a PR appearing, or an error changing.
+        signature = {
+            "pinned": status.pinned,
+            "latest": release.version,
+            "tree": result.propagation.get("tree", ""),
+            "pr_url": result.propagation.get("pr_url", ""),
+            "error": result.propagation.get("error", ""),
+        }
+        if seen_repos.get(spec.name) != signature:
+            emit_pin(result, release)
+        seen_repos[spec.name] = signature
+
+    save_release_state(
+        state,
+        {"tag": release.tag, "schemas": release.schema_versions, "repos": seen_repos},
+    )
+    return release
 
 
 # ─── Main ────────────────────────────────────────────────────
 
 
 def sweep(
-    specs: list[RepoSpec], *, state: Path, jam_source: str, jam_ref: str
-) -> tuple[list[RepoResult], str, bool]:
+    specs: list[RepoSpec],
+    *,
+    state: Path,
+    jam_source: str,
+    jam_ref: str,
+    propagate: bool = False,
+    push: bool = False,
+) -> tuple[list[RepoResult], str, bool, str | None]:
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     history = state / "history"
     repos_dir = state / "repos"
@@ -422,15 +675,47 @@ def sweep(
             result.error = str(exc)
             operational_error = True
         emit_changes(result)
-        print_result(result)
         results.append(result)
+
+    release_tag: str | None = None
+    try:
+        release = track_release(
+            specs,
+            results,
+            state=state,
+            jam_source=jam_source,
+            propagate=propagate,
+            push=push,
+        )
+        release_tag = release.tag if release else None
+    except (jam_release.ReleaseError, subprocess.TimeoutExpired, OSError) as exc:
+        print(f"release tracking failed: {exc}")
+        event_log.emit(
+            ROUTINE,
+            "agent",
+            {
+                "agent": ROUTINE,
+                "kind": "error",
+                "severity": "warning",
+                "summary": f"release tracking failed: {str(exc)[:300]}",
+            },
+        )
+        operational_error = True
+
+    for result in results:
+        print_result(result)
 
     (state / "report.json").write_text(
         json.dumps(
             {
                 "routine": ROUTINE,
                 "ran_at": stamp,
-                "jam": {"source": jam_source, "ref": jam_ref, "commit": jam_commit},
+                "jam": {
+                    "source": jam_source,
+                    "ref": jam_ref,
+                    "commit": jam_commit,
+                    "release": release_tag,
+                },
                 "repos": [asdict(r) for r in results],
             },
             indent=2,
@@ -438,7 +723,7 @@ def sweep(
         ),
         encoding="utf-8",
     )
-    return results, jam_commit, operational_error
+    return results, jam_commit, operational_error, release_tag
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -453,6 +738,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--jam-source", default=DEFAULT_JAM_SOURCE)
     parser.add_argument("--jam-ref", default="main")
     parser.add_argument(
+        "--propagate",
+        action="store_true",
+        help="Prepare a chore/jam-vX.Y.Z branch + patch in each repo behind JAM.",
+    )
+    parser.add_argument(
+        "--push",
+        action="store_true",
+        help="With --propagate: push the branch and open a PR (needs gh auth).",
+    )
+    parser.add_argument(
         "--state",
         type=Path,
         default=None,
@@ -466,19 +761,24 @@ def main(argv: list[str] | None = None) -> int:
     state = args.state or (Path(state_env) if state_env else routine_state_dir(ROUTINE))
     state.mkdir(parents=True, exist_ok=True)
 
+    if args.push and not args.propagate:
+        parser.error("--push requires --propagate")
+
     try:
-        results, jam_commit, failed = sweep(
+        results, jam_commit, failed, release_tag = sweep(
             list(args.repo),
             state=state,
             jam_source=args.jam_source,
             jam_ref=args.jam_ref,
+            propagate=args.propagate,
+            push=args.push,
         )
     except SweepError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         print(f"sweep aborted: {exc}"[:400])
         return 1
 
-    print(one_liner(results, jam_commit))
+    print(one_liner(results, jam_commit, release_tag))
     return 1 if failed else 0
 
 

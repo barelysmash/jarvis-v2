@@ -8,7 +8,7 @@ covers the mechanism the time-based loop runs on; this page is the plan.
 | # | Loop | Primitive | Status |
 |---|------|-----------|--------|
 | 1 | **Conformance sweep** — clone every conforming repo, run `jam validate --json`, diff against the previous sweep, emit drift to the cockpit. Read-only. | time-based (`config/routines.yaml` → systemd timer on guildenstern) | **Live.** Routine `conformance-sweep`, weekdays 05:30. |
-| 2 | **Contract propagation** — a JAM release tag fans out a version-bump branch (pinned `jam` version, re-vendored schemas and category registry) to every conforming repo through that repo's own `ship.sh`, and stops before merge. | proactive (`/api/events`, or a GitHub release event) | Not started. First loop that writes. |
+| 2 | **Contract propagation** — a new JAM release tag fans out an adoption branch (`jam.yaml` pin, re-vendored schemas, `VERSION` note) to every conforming repo that is behind, and stops before push. Landing it is `git am` + the repo's `ship.sh`. | polled from the sweep (the tag list is already in hand; no new ingress) | **Live**, stop-before-push. `--push` exists but is off until the sweep is given write credentials. |
 | 3 | **Run-to-green** — iterate on one repo (edit, run, read the failure, edit) until an evaluator says the stated condition holds — `jam validate` 11/11, mypy strict clean — or a budget runs out, then hand off a branch. | goal-based (`kind: goal` in `routines.yaml`, reserved for the GoalRunner) | Not started. Needs the GoalRunner and session isolation from TASKS.md. |
 | 4 | **Backlog drain** — on a schedule, pick the next unblocked TASKS.md item and spawn a run-to-green for it. | time-based → goal-based | Not started. This is the cockpit's scheduler; it falls out of 1–3. |
 
@@ -34,7 +34,8 @@ covers the mechanism the time-based loop runs on; this page is the plan.
 ## Order
 
 1 → 2 → 3 → 4. The sweep is read-only and gives the others a baseline to
-trigger from. Propagation is the real cross-repo pattern and mostly
-reuses `ship.sh`. Run-to-green has the highest payoff and the largest
-blast radius, so it goes third, once there is a repo with a clear green
-condition to chase. The drain is a scheduler over the rest.
+trigger from. Propagation is the real cross-repo pattern; it prepares the
+change and leaves push, PR and merge to `ship.sh`. Run-to-green has the
+highest payoff and the largest blast radius, so it goes third, once there
+is a repo with a clear green condition to chase. The drain is a scheduler
+over the rest.
