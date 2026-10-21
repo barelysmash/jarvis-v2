@@ -71,6 +71,7 @@ it never proposes changes to JAM or to the repos.
   credentials. A private repo needs read access for `ocelia` on
   guildenstern (a deploy key or credential helper), the same way the
   existing GitHub deploy key gives it `jarvis-v2`.
+- **Releases**: see below.
 - **Drift** is anything that changed between sweeps: a check that went
   green→red (`regression`, severity `warning`), red→green, or a check the
   SDK added or dropped (`drift`, severity `notice`). One `agent` event per
@@ -83,18 +84,56 @@ it never proposes changes to JAM or to the repos.
 Exit 1 means the sweep could not run — jam-sdk would not install, a repo
 would not clone, `jam` crashed. A repo at 10/11 is a finding, not a failure.
 
+### Releases and propagation (loop 2)
+
+The same run watches JAM for release tags (`vX.Y.Z`; the newest wins) and
+compares each repo's `jam.yaml` `manual_version` to it. State lives in
+`jam-release.json`; a new tag emits one `release` event, a repo falling
+behind emits one `behind` event — not one per night.
+
+With `--propagate` (on, in `routines.yaml`), a repo that is behind gets a
+branch prepared **in the sweep's own checkout** under
+`~/jarvis-data/routines/conformance-sweep/repos/<repo>/`:
+
+- `jam.yaml`: `manual_version` bumped (quoting preserved);
+- every `<name>.schema.json` in the repo that is byte-identical to JAM's at
+  the *old* pin is replaced with JAM's at the new tag — identical content is
+  the only proof it was vendored rather than written. A schema file that
+  differs is left alone and listed in the commit message for a human;
+- a `VERSION` note beside vendored schemas (`jam vX.Y.Z`, `<name> X.Y.Z`
+  lines) is rewritten;
+- one commit on `chore/jam-vX.Y.Z`, authored `JARVIS conformance-sweep`,
+  and the same commit as `propagation/<repo>-jam-vX.Y.Z.patch`.
+
+The branch is rebuilt from the repo's current tip every night while it is
+behind, so it never goes stale, and is deleted once the repo's pin catches
+up. One `propagation` event fires when the prepared *content* changes (the
+tree, not the commit — timestamps don't count), with the patch path in the
+summary.
+
+**That is where an unattended run stops.** guildenstern's GitHub key is
+read-only, so landing the change is a person's step, from Rosencrantz:
+
+    scp ocelia@guildenstern:jarvis-data/routines/conformance-sweep/propagation/atlas-jam-v1.4.0.patch .
+    cd /c/bSmash-dev/atlas && git checkout -b chore/jam-v1.4.0 main && git am atlas-jam-v1.4.0.patch
+    ./scripts/ship.sh chore/jam-v1.4.0
+
+`ship.sh` does the push, PR, check-polling and merge it always has. CI is
+the gate: a schema version bump usually also needs the code that declares
+versions (`SCHEMA_VERSIONS` in Atlas) updated, and the contract tests will
+say so.
+
+`--push` goes one step further — pushes the branch and opens the PR from
+guildenstern — and needs a pushable remote plus an authenticated `gh` for
+`ocelia`. It is deliberately not in `routines.yaml`: turning it on is a
+decision to give an unattended process write access to the repos. Merging
+is never done by the sweep under any flag.
+
 ## What comes next (not built)
 
-The sweep is loop 1 of four. In order:
+Loops 1 and 2 live in the sweep. See `docs/LOOPS.md` for the plan:
 
-2. **Contract propagation** (proactive): a JAM release tag fans out
-   version-bump branches to every conforming repo via each repo's
-   `ship.sh`, stopping before merge.
 3. **Run-to-green** (goal-based): `kind: goal` routines that iterate on
    one repo until an evaluator says the stated condition holds.
 4. **Backlog drain**: a scheduled routine that picks the next unblocked
    TASKS.md item and spawns a run-to-green for it — the cockpit's scheduler.
-
-Each needs the write guards the apply/ship scripts already enforce
-(scratch-tree verification, never-on-main, CI polled to completion) carried
-over unchanged, which is why the read-only sweep goes first.

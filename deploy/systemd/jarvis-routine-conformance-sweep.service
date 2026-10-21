@@ -1,7 +1,7 @@
 # Generated from config/routines.yaml by scripts/gen_routine_units.py.
 # Do not edit by hand: change the registry and regenerate.
 [Unit]
-Description=JARVIS routine: conformance-sweep — Nightly JAM conformance sweep: clone every conforming repo, run `jam validate --json`, diff against the previous run, report drift.
+Description=JARVIS routine: conformance-sweep — Nightly JAM conformance sweep: clone every conforming repo, run `jam validate --json`, diff against the previous run, report drift; watch JAM for releases and prepare adoption branches for repos behind.
 
 [Service]
 Type=oneshot

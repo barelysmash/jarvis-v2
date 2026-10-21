@@ -32,13 +32,15 @@ routines:
   conformance-sweep:
     description: >
       Nightly JAM conformance sweep: clone every conforming repo, run
-      `jam validate --json`, diff against the previous run, report drift.
+      `jam validate --json`, diff against the previous run, report drift;
+      watch JAM for releases and prepare adoption branches for repos behind.
     schedule: "Mon..Fri 05:30:00"
     kind: shell
     script: scripts/routines/conformance_sweep.py
     args:
       - --jam-ref
       - main
+      - --propagate          # prepare chore/jam-vX.Y.Z branches + patches; never pushes
       - --repo
       - atlas=https://github.com/barelysmash/atlas
       - --repo
