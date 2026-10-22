@@ -129,11 +129,48 @@ guildenstern — and needs a pushable remote plus an authenticated `gh` for
 decision to give an unattended process write access to the repos. Merging
 is never done by the sweep under any flag.
 
+## Routine kind: goal (loop 3)
+
+A `kind: goal` routine is run-to-green (`docs/adr/ADR-0002-goal-runner.md`):
+`orchestrator/goal_runner.py` iterates on a repository until the routine's
+`condition` command exits 0, or a budget runs out, then hands off a branch
+and a patch the same way the sweep does. The registry entry declares the
+repo, the condition, the named `commands:` the proposer may run, the
+`paths:` it may write, optional `setup:` commands, budgets, and a diff cap;
+`routines.yaml` has the field notes and `jarvis-memory-mypy` as the first.
+
+What a run leaves under `~/jarvis-data/routines/<name>/`:
+
+- `venv/` — a private interpreter. `setup`, the condition and every named
+  command run with it first on PATH, so a routine can `pip install` freely
+  without touching the production `jarvis-venv`;
+- `repo/` — the checkout, HEAD detached between runs; the work is on
+  branch `goal/<name>`, squashed to one commit on hand-off;
+- `runs/<stamp>/transcript.jsonl` and `result.json` — every model and tool
+  call, and the outcome;
+- `propagation/<name>-<stamp>.patch` — when anything was changed.
+
+Outcomes: `green`, `already_green`, `stalled`, `budget`, `too_large`
+(exit 0, findings) and `error` (exit 1). One `agent` event (`kind: goal`)
+carries the outcome and the patch path to the cockpit.
+
+Before scheduling a new goal routine, probe it — clone, setup, condition,
+no model — and read what the proposer would be chasing:
+
+    ssh ocelia@guildenstern 'cd ~/jarvis && JARVIS_DATA_DIR=~/jarvis-data \
+      ~/jarvis-venv/bin/python orchestrator/goal_runner.py jarvis-memory-mypy --probe'
+
+The proposer needs `ANTHROPIC_API_KEY`, which the unit already has from
+`jarvis.env`. `JARVIS_GOAL_MODEL` overrides the default model; a routine's
+`model:` overrides that.
+
+Landing a goal branch is the same as a propagation branch: `scp` the patch,
+`git am`, the repo's `ship.sh`. A non-green run still leaves a branch and a
+transcript; read the transcript before deciding whether the partial work is
+worth keeping.
+
 ## What comes next (not built)
 
-Loops 1 and 2 live in the sweep. See `docs/LOOPS.md` for the plan:
-
-3. **Run-to-green** (goal-based): `kind: goal` routines that iterate on
-   one repo until an evaluator says the stated condition holds.
 4. **Backlog drain**: a scheduled routine that picks the next unblocked
-   TASKS.md item and spawns a run-to-green for it — the cockpit's scheduler.
+   TASKS.md item, writes a goal entry for it, and runs it — the cockpit's
+   scheduler. See `docs/LOOPS.md`.

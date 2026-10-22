@@ -205,5 +205,5 @@ disable_error_code = ["no-any-return", "no-untyped-def", "type-arg"]
 # Runtime-only packages that are not installed when CI type-checks (see
 # requirements-dev.txt for the ones that are).
 [[tool.mypy.overrides]]
-module = ["mcp", "mcp.*"]
+module = ["mcp", "mcp.*", "anthropic", "anthropic.*"]
 ignore_missing_imports = true

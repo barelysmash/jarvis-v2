@@ -1,0 +1,14 @@
+# jarvis-routine-enabled: false
+# Generated from config/routines.yaml by scripts/gen_routine_units.py.
+# Do not edit by hand: change the registry and regenerate.
+[Unit]
+Description=JARVIS routine timer: jarvis-memory-mypy
+
+[Timer]
+OnCalendar=Sat 06:00:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=jarvis-routine-jarvis-memory-mypy.service
+
+[Install]
+WantedBy=timers.target
