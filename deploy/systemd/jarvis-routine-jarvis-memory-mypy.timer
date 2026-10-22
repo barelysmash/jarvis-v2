@@ -1,4 +1,3 @@
-# jarvis-routine-enabled: false
 # Generated from config/routines.yaml by scripts/gen_routine_units.py.
 # Do not edit by hand: change the registry and regenerate.
 [Unit]

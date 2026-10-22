@@ -42,8 +42,10 @@ Operational Intelligence      Trading Intelligence
         singleton — non-negotiable for unattended operation)
       - [x] GoalRunner — built per docs/adr/ADR-0002-goal-runner.md
         (`orchestrator/goal_runner.py`, `kind: goal`) — DONE 2026-10-21
-      - [ ] Probe `jarvis-memory-mypy` on guildenstern, then flip
-        `enabled: true` in routines.yaml for the first scheduled run
+      - [x] Probe `jarvis-memory-mypy` on guildenstern, then flip
+        `enabled: true` in routines.yaml for the first scheduled run — DONE
+        2026-10-22; first run Sat 2026-10-24 06:00. Read the transcript under
+        ~/jarvis-data/routines/jarvis-memory-mypy/runs/ afterwards.
       - [ ] Loop 4: backlog drain (TASKS.md item → goal entry → run)
       - [x] `routines.yaml` scheduled via systemd timers — DONE 2026-10-20
         (`config/routines.yaml` → generated `jarvis-routine-*` units,
