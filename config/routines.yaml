@@ -74,8 +74,8 @@ routines:
     max_changed_lines: 200
     timeout_minutes: 25
     jitter_seconds: 120
-    # Installed by deploy, not scheduled until a probe on guildenstern looks
-    # right (runs setup + condition only, no model):
+    # Probed on guildenstern 2026-10-21: 8 mypy errors in semantic.py, venv +
+    # setup fine. Re-probe any time (setup + condition only, no model):
     #   ssh ocelia@guildenstern 'cd ~/jarvis && JARVIS_DATA_DIR=~/jarvis-data \
     #     ~/jarvis-venv/bin/python orchestrator/goal_runner.py jarvis-memory-mypy --probe'
-    enabled: false
+    enabled: true
