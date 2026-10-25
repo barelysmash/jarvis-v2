@@ -53,7 +53,9 @@ Operational Intelligence      Trading Intelligence
         ~/jarvis-data/routines/jarvis-brain-mypy/runs/ after the first run.
       - [ ] Remaining strict debt for later goal routines: `load_dotenv`
         conditional-def in main.py / scripts (1 each), server/api.py (4)
-      - [ ] Loop 4: backlog drain (TASKS.md item → goal entry → run)
+      - [ ] Loop 4: backlog drain — designed in docs/adr/ADR-0003-backlog-drain.md
+        (`config/backlog.yaml` of goal specs → `backlog-drain` routine, Sun 06:00,
+        one entry per fire; TASKS.md is never parsed). Build next.
       - [x] `routines.yaml` scheduled via systemd timers — DONE 2026-10-20
         (`config/routines.yaml` → generated `jarvis-routine-*` units,
         `scripts/run_routine.py`, `docs/ROUTINES.md`). First routine:
