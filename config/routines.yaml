@@ -79,3 +79,40 @@ routines:
     #   ssh ocelia@guildenstern 'cd ~/jarvis && JARVIS_DATA_DIR=~/jarvis-data \
     #     ~/jarvis-venv/bin/python orchestrator/goal_runner.py jarvis-memory-mypy --probe'
     enabled: true
+
+  jarvis-brain-mypy:
+    description: >
+      Run-to-green (ADR-0002): make orchestrator/brain.py pass mypy --strict
+      with the Anthropic SDK installed (content-block union narrowing) while
+      the brain's own tests keep passing. Prepares goal/jarvis-brain-mypy +
+      a patch; never pushes.
+    schedule: "Sat 07:00:00"       # staggered: one lock per repo, memory routine holds it at 06:00
+    kind: goal
+    repo: https://github.com/barelysmash/jarvis-v2
+    base: main
+    setup:
+      - python -m pip install --quiet --upgrade pip
+      - python -m pip install --quiet -r requirements-dev.txt -r requirements.txt
+    # Green = the whole package is strict-clean AND the tests that fake SDK
+    # blocks with SimpleNamespace still pass; isinstance narrowing alone would
+    # satisfy mypy and break them. goal_check.py runs both; it is in scripts/
+    # and named here, so the proposer cannot touch it. The target is the
+    # package, not brain.py: naming the file would protect it.
+    condition: >-
+      python scripts/goal_check.py
+      -- python -m mypy --strict orchestrator
+      -- python -m pytest -q tests/test_cockpit.py tests/test_muse_runtime_context.py
+    commands:
+      mypy: python -m mypy --strict orchestrator
+      tests: python -m pytest -q tests/test_cockpit.py tests/test_muse_runtime_context.py
+    paths:
+      - orchestrator/brain.py
+    budget: {iterations: 12, minutes: 25, tokens: 600000}
+    max_changed_lines: 250
+    timeout_minutes: 30
+    jitter_seconds: 120
+    # Baseline 2026-10-24: 122 union-attr findings, all brain.py. Probe before
+    # trusting the first scheduled run:
+    #   ssh ocelia@guildenstern 'cd ~/jarvis && JARVIS_DATA_DIR=~/jarvis-data \
+    #     ~/jarvis-venv/bin/python orchestrator/goal_runner.py jarvis-brain-mypy --probe'
+    enabled: true

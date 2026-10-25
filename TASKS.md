@@ -44,8 +44,15 @@ Operational Intelligence      Trading Intelligence
         (`orchestrator/goal_runner.py`, `kind: goal`) — DONE 2026-10-21
       - [x] Probe `jarvis-memory-mypy` on guildenstern, then flip
         `enabled: true` in routines.yaml for the first scheduled run — DONE
-        2026-10-22; first run Sat 2026-10-24 06:00. Read the transcript under
-        ~/jarvis-data/routines/jarvis-memory-mypy/runs/ afterwards.
+        2026-10-22; first run went green 2026-10-24 and landed as PR #22
+        (semantic.py strict-clean). Now a weekly guard (already_green).
+      - [x] `jarvis-brain-mypy`: second goal routine, Sat 07:00 — the 122
+        brain.py union-attr findings, condition = mypy --strict orchestrator
+        + the brain tests via `scripts/goal_check.py` (own goal_runner.py debt
+        fixed by hand first, TypeGuards) — DONE 2026-10-24. Probe, then read
+        ~/jarvis-data/routines/jarvis-brain-mypy/runs/ after the first run.
+      - [ ] Remaining strict debt for later goal routines: `load_dotenv`
+        conditional-def in main.py / scripts (1 each), server/api.py (4)
       - [ ] Loop 4: backlog drain (TASKS.md item → goal entry → run)
       - [x] `routines.yaml` scheduled via systemd timers — DONE 2026-10-20
         (`config/routines.yaml` → generated `jarvis-routine-*` units,

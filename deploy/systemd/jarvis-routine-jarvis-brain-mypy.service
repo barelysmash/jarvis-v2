@@ -1,0 +1,14 @@
+# Generated from config/routines.yaml by scripts/gen_routine_units.py.
+# Do not edit by hand: change the registry and regenerate.
+[Unit]
+Description=JARVIS routine: jarvis-brain-mypy — Run-to-green (ADR-0002): make orchestrator/brain.py pass mypy --strict with the Anthropic SDK installed (content-block union narrowing) while the brain's own tests keep passing. Prepares goal/jarvis-brain-mypy + a patch; never pushes.
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/jarvis
+EnvironmentFile=%h/jarvis-data/env/jarvis.env
+Environment=JARVIS_PROC=routine
+ExecStart=%h/jarvis-venv/bin/python scripts/run_routine.py jarvis-brain-mypy
+TimeoutStartSec=31min
+StandardOutput=append:%h/jarvis-data/logs/routine-jarvis-brain-mypy.log
+StandardError=append:%h/jarvis-data/logs/routine-jarvis-brain-mypy.err.log

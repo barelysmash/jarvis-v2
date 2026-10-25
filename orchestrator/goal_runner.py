@@ -44,7 +44,7 @@ import venv
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, Final, Protocol
+from typing import Any, Final, Protocol, TypeGuard, cast
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -133,7 +133,12 @@ class ModelClient(Protocol):
 
 
 class AnthropicClient:
-    """Thin adapter over the Anthropic SDK producing :class:`ModelReply`."""
+    """Thin adapter over the Anthropic SDK producing :class:`ModelReply`.
+
+    The SDK's response blocks are a wide union; the two we act on are
+    recognised by their ``type`` tag (duck-typed, so tests can hand in
+    plain objects) and narrowed for the type checker with TypeGuards.
+    """
 
     def __init__(self, api_key: str | None = None) -> None:
         import anthropic  # runtime dependency; not installed at type-check time
@@ -149,27 +154,27 @@ class AnthropicClient:
         tools: list[dict[str, Any]],
         max_tokens: int,
     ) -> ModelReply:
+        # The SDK types these as TypedDict unions; our dicts are built to that
+        # shape (role/content; name/description/input_schema). Cast at the edge.
         response = self._client.messages.create(
             model=model,
             system=system,
-            messages=messages,
-            tools=tools,
+            messages=cast(Any, messages),
+            tools=cast(Any, tools),
             max_tokens=max_tokens,
         )
         content: list[dict[str, Any]] = []
         for block in response.content:
-            kind = getattr(block, "type", "")
-            if kind == "text":
+            if _is_text_block(block):
                 content.append({"type": "text", "text": block.text})
-            elif kind == "tool_use":
+            elif _is_tool_use_block(block):
+                raw_input = block.input
                 content.append(
                     {
                         "type": "tool_use",
                         "id": block.id,
                         "name": block.name,
-                        "input": dict(block.input)
-                        if isinstance(block.input, dict)
-                        else {},
+                        "input": dict(raw_input) if isinstance(raw_input, dict) else {},
                     }
                 )
         usage = getattr(response, "usage", None)
@@ -180,6 +185,26 @@ class AnthropicClient:
             output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
             model=str(getattr(response, "model", model)),
         )
+
+
+class _TextLike(Protocol):
+    type: str
+    text: str
+
+
+class _ToolUseLike(Protocol):
+    type: str
+    id: str
+    name: str
+    input: object
+
+
+def _is_text_block(block: object) -> TypeGuard[_TextLike]:
+    return getattr(block, "type", None) == "text" and hasattr(block, "text")
+
+
+def _is_tool_use_block(block: object) -> TypeGuard[_ToolUseLike]:
+    return getattr(block, "type", None) == "tool_use" and hasattr(block, "name")
 
 
 # ─── Git / shell helpers ─────────────────────────────────────
