@@ -52,6 +52,18 @@ routines:
     jitter_seconds: 120
     enabled: true
 
+  backlog-drain:
+    description: >
+      Backlog drain (ADR-0003): run the next eligible entry of
+      config/backlog.yaml through the goal runner, one per fire. Prepares
+      goal/backlog-<entry> + a patch, ticks the TASKS.md line; never pushes.
+    schedule: "Sun 06:00:00"      # goal routines own Saturday; one lock per repo
+    kind: shell
+    script: scripts/routines/backlog_drain.py
+    timeout_minutes: 40           # must exceed the largest entry budget + clone/setup
+    jitter_seconds: 120
+    enabled: true
+
   jarvis-memory-mypy:
     description: >
       Run-to-green (ADR-0002): make orchestrator/memory pass mypy --strict with

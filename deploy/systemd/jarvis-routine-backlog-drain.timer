@@ -1,0 +1,13 @@
+# Generated from config/routines.yaml by scripts/gen_routine_units.py.
+# Do not edit by hand: change the registry and regenerate.
+[Unit]
+Description=JARVIS routine timer: backlog-drain
+
+[Timer]
+OnCalendar=Sun 06:00:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=jarvis-routine-backlog-drain.service
+
+[Install]
+WantedBy=timers.target

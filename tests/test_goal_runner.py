@@ -59,7 +59,9 @@ def git(*args: str, cwd: Path) -> str:
         "GIT_COMMITTER_NAME": "t",
         "GIT_COMMITTER_EMAIL": "t@t",
     }
-    return subprocess.check_output(["git", *args], cwd=cwd, env=env, text=True)
+    return subprocess.check_output(
+        ["git", *args], cwd=cwd, env=env, text=True, encoding="utf-8"
+    )
 
 
 def make_target(root: Path, *, fixed: bool = False) -> str:

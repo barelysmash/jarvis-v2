@@ -1,0 +1,82 @@
+# JARVIS backlog — the drainable queue (ADR-0003).
+#
+# An ordered list of run-to-green goals. `backlog-drain` (config/routines.yaml,
+# Sundays) picks the first eligible entry and runs it through the goal runner
+# exactly as a `kind: goal` routine, one entry per fire. TASKS.md is never
+# parsed: an item becomes drainable when someone writes its condition here.
+#
+# Fields: the `kind: goal` fields of a routine — repo, base, condition,
+# commands, paths, setup, unprotect, budget, max_changed_lines, model — plus
+#   name:         unit/dir-safe; the run is `backlog-<name>`, branch goal/backlog-<name>
+#   description:  one line
+#   task:         the TASKS.md line (text after `- [ ] `) to tick on green; optional
+#   after:        earlier entries that must be *landed* first; optional
+#
+# Entry lifecycle lives in ~/jarvis-data/routines/backlog-drain/queue.json:
+#   pending -> green (patch waiting; re-run when base moves)
+#           -> landed (already_green on a fresh clone; delete the entry)
+#           -> parked (stalled/budget/too_large/error; edit the entry to re-arm)
+#
+# Probe before trusting an entry:
+#   ssh ocelia@guildenstern 'cd ~/jarvis && JARVIS_DATA_DIR=~/jarvis-data \
+#     ~/jarvis-venv/bin/python scripts/routines/backlog_drain.py --probe server-api-mypy'
+
+backlog:
+
+  - name: server-api-mypy
+    description: >
+      server/api.py strict-clean with the runtime packages installed: four
+      chromadb Optional/Mapping findings in the memory listing endpoint.
+    task: "`server/api.py` strict (4 findings) — backlog entry server-api-mypy"
+    repo: https://github.com/barelysmash/jarvis-v2
+    base: main
+    setup:
+      - python -m pip install --quiet --upgrade pip
+      - python -m pip install --quiet -r requirements-dev.txt -r requirements.txt
+    # --follow-imports=silent: api.py's own findings only; brain.py's union
+    # debt has its own routine (jarvis-brain-mypy) and must not gate this.
+    condition: >-
+      python scripts/goal_check.py
+      -- python -m mypy --strict --follow-imports=silent server/api.py
+      -- python -m pytest -q tests/test_cockpit.py tests/test_muse_review_delivery.py
+    commands:
+      mypy: python -m mypy --strict --follow-imports=silent server/api.py
+      tests: python -m pytest -q tests/test_cockpit.py tests/test_muse_review_delivery.py
+    paths:
+      - server/api.py
+    budget: {iterations: 8, minutes: 15, tokens: 300000}
+    max_changed_lines: 80
+
+  - name: dotenv-shim-mypy
+    description: >
+      The `load_dotenv` fallback stub in main.py and three scripts has a
+      different signature from python-dotenv's; mypy --strict rejects the
+      conditional redefinition. One shared, correctly-typed shim.
+    task: "`load_dotenv` conditional-def strict findings in main.py / scripts — backlog entry dotenv-shim-mypy"
+    repo: https://github.com/barelysmash/jarvis-v2
+    base: main
+    setup:
+      - python -m pip install --quiet --upgrade pip
+      - python -m pip install --quiet -r requirements-dev.txt -r requirements.txt
+    condition: >-
+      python -m mypy --strict --follow-imports=silent
+      main.py scripts/run_sleep_cycle.py scripts/run_voice.py scripts/trigger_briefing.py
+    commands:
+      mypy: >-
+        python -m mypy --strict --follow-imports=silent
+        main.py scripts/run_sleep_cycle.py scripts/run_voice.py scripts/trigger_briefing.py
+      tests: python -m pytest -q tests
+    paths:
+      - main.py
+      - scripts/run_sleep_cycle.py
+      - scripts/run_voice.py
+      - scripts/trigger_briefing.py
+      - orchestrator/dotenv_shim.py
+    # scripts/ is protected by default (ADR-0002 §4); these three are the
+    # targets, so they are opened — and only they. Committed here, reviewed.
+    unprotect:
+      - scripts/run_sleep_cycle.py
+      - scripts/run_voice.py
+      - scripts/trigger_briefing.py
+    budget: {iterations: 8, minutes: 15, tokens: 300000}
+    max_changed_lines: 120
