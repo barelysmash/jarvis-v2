@@ -188,6 +188,7 @@ worth keeping.
 
 ## What comes next (not built)
 
-4. **Backlog drain**: a scheduled routine that picks the next unblocked
-   TASKS.md item, writes a goal entry for it, and runs it — the cockpit's
-   scheduler. See `docs/LOOPS.md`.
+4. **Backlog drain**: one `backlog-drain` routine that picks the next
+   eligible entry of `config/backlog.yaml` (a list of goal specs) and runs
+   it through the goal runner, one per fire. Designed in
+   `docs/adr/ADR-0003-backlog-drain.md`; see `docs/LOOPS.md`.
