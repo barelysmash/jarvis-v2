@@ -223,6 +223,8 @@ def git(
         env=env,
         capture_output=True,
         text=True,
+        encoding="utf-8",  # git emits UTF-8; the platform default (cp1252 on
+        errors="replace",  # Windows) would mangle non-ASCII in patches
         timeout=timeout,
         check=False,
     )

@@ -186,9 +186,40 @@ Landing a goal branch is the same as a propagation branch: `scp` the patch,
 transcript; read the transcript before deciding whether the partial work is
 worth keeping.
 
-## What comes next (not built)
+## Routine: `backlog-drain` (loop 4)
 
-4. **Backlog drain**: one `backlog-drain` routine that picks the next
-   eligible entry of `config/backlog.yaml` (a list of goal specs) and runs
-   it through the goal runner, one per fire. Designed in
-   `docs/adr/ADR-0003-backlog-drain.md`; see `docs/LOOPS.md`.
+`config/backlog.yaml` is an ordered list of goal specs — the `kind: goal`
+fields plus `task:` (the `TASKS.md` line to tick) and `after:` (entries
+that must be landed first). The drain (`scripts/routines/backlog_drain.py`,
+Sundays) picks the first eligible entry and runs it through the goal
+runner exactly as a standalone routine, one entry per fire
+(`docs/adr/ADR-0003-backlog-drain.md`). A run is named `backlog-<entry>`
+everywhere: its state dir, its branch `goal/backlog-<entry>`, its events.
+
+Eligibility, from `queue.json` in the drain's state dir:
+
+| state | re-runs when |
+|---|---|
+| `pending` | always |
+| `green` (patch waiting) | the repo's base has moved — the patch is rebuilt, not re-discovered |
+| `parked` (stalled / budget / too_large / error) | the entry was edited |
+| `landed` (`already_green` on a fresh clone) | never; delete the entry |
+
+After a green run the drain ticks `- [ ] <task>` in `TASKS.md` on the goal
+branch, amends the squashed commit and regenerates the patch — so landing
+the patch closes the task. If the line is absent or ambiguous the summary
+says `task not ticked` and nothing else changes.
+
+    py scripts/routines/backlog_drain.py --list              # the queue and why each entry waits
+    py scripts/routines/backlog_drain.py --dry-run           # which entry would run
+    py scripts/routines/backlog_drain.py --probe NAME        # clone/setup/condition, no model
+    py scripts/routines/backlog_drain.py --only NAME         # force a retry after reading a transcript
+
+On guildenstern, prefix with `cd ~/jarvis && JARVIS_DATA_DIR=~/jarvis-data
+~/jarvis-venv/bin/python`. Landing a backlog patch is the goal-routine
+recipe above; the patch is under
+`~/jarvis-data/routines/backlog-<entry>/propagation/`.
+
+The drain's `timeout_minutes` must exceed the largest entry budget plus
+clone and setup; `tests/test_backlog_drain.py` checks that, and that every
+entry's `task:` line exists in `TASKS.md` exactly once.

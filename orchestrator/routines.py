@@ -16,11 +16,12 @@ units into ``deploy/systemd`` is ``scripts/gen_routine_units.py``'s. Both
 are thin wrappers over this module so the tests can pin the behaviour
 without touching systemd or spawning anything.
 
-Only ``kind: shell`` exists today: the routine is a script run as a
-subprocess with a hard timeout, no brain, no shared session. ``kind: goal``
-is reserved for the GoalRunner (TASKS.md, "Loop automation") and is
-rejected by the loader until that lands, so a typo cannot silently
-schedule nothing.
+``kind: shell`` is a script run as a subprocess with a hard timeout, no
+brain, no shared session. ``kind: goal`` is run-to-green (ADR-0002,
+``orchestrator/goal_runner.py``). The backlog (ADR-0003,
+``config/backlog.yaml``) is a second, ordered list of goal specs with no
+schedule of their own; :func:`load_backlog` validates it with the same
+rules and the ``backlog-drain`` routine runs one entry per fire.
 """
 
 from __future__ import annotations
@@ -34,6 +35,7 @@ from typing import Any, Final
 import yaml
 
 DEFAULT_CONFIG_PATH: Final[str] = "config/routines.yaml"
+DEFAULT_BACKLOG_PATH: Final[str] = "config/backlog.yaml"
 UNIT_PREFIX: Final[str] = "jarvis-routine-"
 KINDS: Final[frozenset[str]] = frozenset({"shell", "goal"})
 RESERVED_KINDS: Final[frozenset[str]] = frozenset()
@@ -94,6 +96,95 @@ class Routine:
     @property
     def timer_name(self) -> str:
         return f"{UNIT_PREFIX}{self.name}.timer"
+
+
+@dataclass(frozen=True, slots=True)
+class BacklogEntry:
+    """One drainable item of ``config/backlog.yaml`` (ADR-0003 §1)."""
+
+    name: str
+    description: str
+    goal: GoalSpec
+    task: str = ""  # the TASKS.md checkbox line to tick on green, verbatim
+    after: tuple[str, ...] = ()  # entries that must be landed first
+    raw: dict[str, Any] = field(default_factory=dict)  # as written; hashed
+
+    @property
+    def routine_name(self) -> str:
+        return f"backlog-{self.name}"
+
+
+BACKLOG_KEYS: Final[frozenset[str]] = frozenset({"description", "task", "after"})
+
+
+def load_backlog(path: str | Path = DEFAULT_BACKLOG_PATH) -> list[BacklogEntry]:
+    """Load and validate the backlog, in declaration order.
+
+    Same contract as :func:`load_routines`: the first problem raises
+    :class:`RoutineConfigError`, so a malformed entry fails CI rather than a
+    Sunday. Names are unique, ``after`` names must exist and precede the
+    entry (the drain picks in file order, so a later dependency could
+    never be landed first).
+    """
+
+    config_path = Path(path)
+    try:
+        raw = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise RoutineConfigError(f"backlog not found: {config_path}") from exc
+    except yaml.YAMLError as exc:
+        raise RoutineConfigError(f"{config_path}: invalid YAML: {exc}") from exc
+
+    if not isinstance(raw, dict) or "backlog" not in raw:
+        raise RoutineConfigError(f"{config_path}: top-level 'backlog:' list required")
+    items = raw["backlog"]
+    if items is None:
+        return []
+    if not isinstance(items, list):
+        raise RoutineConfigError(f"{config_path}: 'backlog:' must be a list")
+
+    entries: list[BacklogEntry] = []
+    seen: set[str] = set()
+    for index, item in enumerate(items, 1):
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            raise RoutineConfigError(
+                f"{config_path}: backlog item {index} must be a mapping with 'name'"
+            )
+        name = str(item["name"]).strip()
+        where = f"{config_path}: backlog '{name}'"
+        if not NAME_PATTERN.match(name) or len(name) > 40:
+            raise RoutineConfigError(
+                f"{where}: name must match {NAME_PATTERN.pattern} and be <= 40 chars"
+            )
+        if name in seen:
+            raise RoutineConfigError(f"{where}: duplicate name")
+        unknown = set(item) - BACKLOG_KEYS - GOAL_KEYS - {"name"}
+        if unknown:
+            raise RoutineConfigError(f"{where}: unknown key(s) {sorted(unknown)}")
+        description = str(item.get("description") or "").strip()
+        task_raw = item.get("task")
+        task = str(task_raw).strip() if task_raw else ""
+        after = _str_list(item, "after", where)
+        for dep in after:
+            if dep == name:
+                raise RoutineConfigError(f"{where}: 'after' names itself")
+            if dep not in seen:
+                raise RoutineConfigError(
+                    f"{where}: 'after' names '{dep}', which must be an earlier entry"
+                )
+        goal = _parse_goal({k: v for k, v in item.items() if k in GOAL_KEYS}, where)
+        entries.append(
+            BacklogEntry(
+                name=name,
+                description=description,
+                goal=goal,
+                task=task,
+                after=after,
+                raw=dict(item),
+            )
+        )
+        seen.add(name)
+    return entries
 
 
 def load_routines(path: str | Path = DEFAULT_CONFIG_PATH) -> dict[str, Routine]:

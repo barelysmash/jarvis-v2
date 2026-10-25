@@ -1,7 +1,7 @@
 # ADR-0003: Backlog drain (loop 4)
 
-Status: Proposed
-Date: 2026-10-25
+Status: Accepted
+Date: 2026-10-25 (built the same day: `scripts/routines/backlog_drain.py`)
 
 ## Context
 
@@ -64,8 +64,10 @@ Saturday). Each fire:
 2. picks **one** entry by §3;
 3. builds a `Routine(name="backlog-<entry>", kind="goal", goal=<spec>)`
    and calls `run_goal()` in-process with state
-   `~/jarvis-data/routines/backlog-drain/<entry>/` — the same `venv/`,
-   `repo/`, `runs/`, `propagation/` layout a goal routine has;
+   `~/jarvis-data/routines/backlog-<entry>/` — a sibling of the drain's
+   own state dir with the same `venv/`, `repo/`, `runs/`, `propagation/`
+   layout a goal routine has, so the goal runner's per-repo lock
+   (`routines/.locks/`) is the one the standalone routines use;
 4. records the outcome, base sha and spec hash in `queue.json`;
 5. prints one summary line: `backlog: <entry> → <outcome> [<patch>]`, or
    `backlog: nothing eligible (N landed, M awaiting landing, K parked)`.
