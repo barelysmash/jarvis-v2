@@ -45,9 +45,9 @@ and watch `~/jarvis-data/logs/routine-conformance-sweep.log`.
 
 - **Isolation.** `kind: shell` routines are subprocesses. They never touch
   the brain or the shared HUD session (the "session isolation" rule from
-  TASKS.md holds trivially: there is no session). `kind: goal` — a fresh,
-  isolated brain session driven by the GoalRunner — is reserved in the
-  loader and rejected until it exists, so a typo cannot schedule nothing.
+  TASKS.md holds trivially: there is no session). `kind: goal` routines run
+  the GoalRunner's own minimal tool loop with a fresh model conversation per
+  run — never JarvisBrain and never the shared session (see below).
 - **A hard timeout.** `timeout_minutes` kills the script; the unit's
   `TimeoutStartSec` is one minute longer so systemd never wins that race.
 - **A record.** `$JARVIS_DATA_DIR/routines/<name>/runs/<stamp>.log` keeps
@@ -137,7 +137,20 @@ A `kind: goal` routine is run-to-green (`docs/adr/ADR-0002-goal-runner.md`):
 and a patch the same way the sweep does. The registry entry declares the
 repo, the condition, the named `commands:` the proposer may run, the
 `paths:` it may write, optional `setup:` commands, budgets, and a diff cap;
-`routines.yaml` has the field notes and `jarvis-memory-mypy` as the first.
+`routines.yaml` has the field notes; `jarvis-memory-mypy` was the first
+(green on its first scheduled run, landed as PR #22) and `jarvis-brain-mypy`
+the second.
+
+**A condition with more than one part.** `condition` is one command. When
+green has to mean two things — `jarvis-brain-mypy` needs the package
+strict-clean *and* the brain tests still passing, because those tests fake
+SDK content blocks with `SimpleNamespace` and `isinstance` narrowing would
+satisfy mypy while breaking them — that one command is
+`scripts/goal_check.py -- <cmd> -- <cmd> ...`: each part runs in order under
+a header, the first failure stops it and its exit code is the result. The
+script sits in `scripts/` and is named by the condition, so the proposer
+cannot edit it. Point the condition at the *package* (`orchestrator`), not
+the file you want fixed: a file named in the condition is protected.
 
 What a run leaves under `~/jarvis-data/routines/<name>/`:
 
@@ -153,6 +166,10 @@ What a run leaves under `~/jarvis-data/routines/<name>/`:
 Outcomes: `green`, `already_green`, `stalled`, `budget`, `too_large`
 (exit 0, findings) and `error` (exit 1). One `agent` event (`kind: goal`)
 carries the outcome and the patch path to the cockpit.
+
+Goal routines on the same repo share one lock; stagger their schedules
+(`jarvis-memory-mypy` 06:00, `jarvis-brain-mypy` 07:00) so the second does
+not simply find the lock held and exit.
 
 Before scheduling a new goal routine, probe it — clone, setup, condition,
 no model — and read what the proposer would be chasing:

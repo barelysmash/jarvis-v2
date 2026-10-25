@@ -481,3 +481,52 @@ class RunRoutineDispatchTests(_Fixture):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GoalCheckTests(unittest.TestCase):
+    """scripts/goal_check.py: several commands as one condition."""
+
+    SCRIPT = str(REPO / "scripts" / "goal_check.py")
+
+    def run_check(self, *argv: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, self.SCRIPT, *argv], capture_output=True, text=True
+        )
+
+    def test_all_pass(self) -> None:
+        proc = self.run_check(
+            "--", "python", "-c", "print('a')", "--", "python", "-c", "print('b')"
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertIn("[1/2]", proc.stdout)
+        self.assertIn("[2/2]", proc.stdout)
+        self.assertIn("all 2 command(s) passed", proc.stdout)
+        # bare `python` was resolved to the running interpreter
+        self.assertIn(sys.executable, proc.stdout)
+
+    def test_first_failure_stops_and_propagates_exit(self) -> None:
+        proc = self.run_check(
+            "--",
+            "python",
+            "-c",
+            "import sys; print('red'); sys.exit(3)",
+            "--",
+            "python",
+            "-c",
+            "print('never')",
+        )
+        self.assertEqual(proc.returncode, 3)
+        self.assertIn("FAILED [1/2] exit 3", proc.stdout)
+        self.assertNotIn("never", proc.stdout)
+
+    def test_no_commands(self) -> None:
+        self.assertEqual(self.run_check().returncode, 2)
+
+    def test_split(self) -> None:
+        sys.path.insert(0, str(REPO / "scripts"))
+        import goal_check
+
+        self.assertEqual(
+            goal_check.split_commands(["--", "a", "b", "--", "c"]), [["a", "b"], ["c"]]
+        )
+        self.assertEqual(goal_check.split_commands(["a"]), [["a"]])
