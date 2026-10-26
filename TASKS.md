@@ -77,9 +77,10 @@ Operational Intelligence      Trading Intelligence
       caused the reauth-script import crash). Touches imports in tools.py.
 - [ ] `.gitattributes` with `* text=auto eol=lf` (silence CRLF warnings)
 - [ ] SPA catch-all for StaticFiles if HUD ever gets client-side routes
-- [ ] JAM: fill in Standards + Glossary "coming soon" sections as conventions
-      solidify (secrets pattern, deploy pattern, agent registration are all
-      already de-facto standards — write them down)
+- [x] JAM: fill in Standards "coming soon" sections — DONE 2026-10-26: JAM #34
+      (Unattended Automation) and #35 (Deployment, Secrets, Agent Registration),
+      written from what jarvis-v2 and Atlas already do. Glossary has no
+      "coming soon" left; RFCs and Roadmap in the JAM README still are.
 
 ## Done (July 7–8 session)
 - [x] Google OAuth reauth — fresh token, `google_reauth.py` committed
