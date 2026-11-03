@@ -26,8 +26,10 @@ rules and the ``backlog-drain`` routine runs one entry per fire.
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Final
@@ -380,6 +382,25 @@ def _parse_goal(spec: dict[str, Any], where: str) -> GoalSpec:
                 f"{where}: path glob must be repo-relative: {pattern}"
             )
 
+    unprotect = _str_list(spec, "unprotect", where)
+    # A file the condition names is protected at run time (ADR-0002 §4). If it
+    # is also the thing `paths:` says to edit, every write is refused and the
+    # run stalls — the first backlog run did exactly that. Catch it in CI.
+    for token in shlex.split(condition):
+        posix = PurePosixPath(token.replace("\\", "/"))
+        if posix.is_absolute() or not posix.suffix or token.startswith("-"):
+            continue  # an interpreter, a flag, a directory or a bare word
+        rel = posix.as_posix()
+        if any(fnmatch.fnmatch(rel, g.replace("**", "*")) for g in paths) and not any(
+            fnmatch.fnmatch(rel, g.replace("**", "*")) for g in unprotect
+        ):
+            raise RoutineConfigError(
+                f"{where}: the condition names '{rel}', which is also in 'paths'; "
+                "a file the condition names is protected, so the proposer could "
+                "never edit it. Point the condition at the package (directory) "
+                f"instead, or list '{rel}' under 'unprotect'."
+            )
+
     budget = dict(GOAL_BUDGET_DEFAULTS)
     budget_raw = spec.get("budget") or {}
     if not isinstance(budget_raw, dict):
@@ -407,7 +428,7 @@ def _parse_goal(spec: dict[str, Any], where: str) -> GoalSpec:
         commands=commands,
         paths=paths,
         setup=_str_list(spec, "setup", where),
-        unprotect=_str_list(spec, "unprotect", where),
+        unprotect=unprotect,
         budget=budget,
         max_changed_lines=max_lines,
         model=model,

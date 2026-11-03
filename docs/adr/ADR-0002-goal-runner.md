@@ -62,7 +62,8 @@ Tools, all scoped to the run's checkout:
 |---|---|
 | `read_file(path)` | read any file in the checkout |
 | `list_files(glob)` | enumerate paths in the checkout |
-| `write_file(path, content)` | write a file **inside the edit scope** (below) |
+| `edit_file(path, old, new)` | replace one exact occurrence in a file **inside the edit scope**; the normal way to change anything not small, since the proposer's output per turn is capped and a long whole-file write is cut off (added 2026-11-03 after the first backlog run hit the cap on a 40 KB file) |
+| `write_file(path, content)` | create a file, or replace a small one, **inside the edit scope** (below) |
 | `run(name)` | run one of the registry's `commands` by name, with the routine's timeout; output clipped |
 
 There is no arbitrary shell. Commands the proposer may run are declared by
