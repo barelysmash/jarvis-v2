@@ -333,12 +333,12 @@ async def memory_recent(facts: int = 5, episodes: int = 5):
         all_facts = memory.semantic.collection.get()
         # Sort by created_at if present, else by insertion order
         fact_pairs = list(zip(
-            all_facts.get("documents", []),
-            all_facts.get("metadatas", []),
+            all_facts.get("documents") or [],
+            all_facts.get("metadatas") or [],
         ))
         # Sort descending by created_at
         fact_pairs.sort(
-            key=lambda p: (p[1] or {}).get("created_at", ""),
+            key=lambda p: str((p[1] or {}).get("created_at", "")),
             reverse=True,
         )
         recent_facts = [doc for doc, _ in fact_pairs[:facts]]
