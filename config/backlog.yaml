@@ -33,14 +33,16 @@ backlog:
     setup:
       - python -m pip install --quiet --upgrade pip
       - python -m pip install --quiet -r requirements-dev.txt -r requirements.txt
-    # --follow-imports=silent: api.py's own findings only; brain.py's union
-    # debt has its own routine (jarvis-brain-mypy) and must not gate this.
+    # --follow-imports=silent: the server package's own findings only; brain.py's
+    # union debt has its own routine (jarvis-brain-mypy) and must not gate this.
+    # The target is the package, not server/api.py: a file named in the condition
+    # is protected (first run, 2026-11-01, stalled on exactly that).
     condition: >-
       python scripts/goal_check.py
-      -- python -m mypy --strict --follow-imports=silent server/api.py
+      -- python -m mypy --strict --follow-imports=silent server
       -- python -m pytest -q tests/test_cockpit.py tests/test_muse_review_delivery.py
     commands:
-      mypy: python -m mypy --strict --follow-imports=silent server/api.py
+      mypy: python -m mypy --strict --follow-imports=silent server
       tests: python -m pytest -q tests/test_cockpit.py tests/test_muse_review_delivery.py
     paths:
       - server/api.py
@@ -72,9 +74,11 @@ backlog:
       - scripts/run_voice.py
       - scripts/trigger_briefing.py
       - orchestrator/dotenv_shim.py
-    # scripts/ is protected by default (ADR-0002 §4); these three are the
-    # targets, so they are opened — and only they. Committed here, reviewed.
+    # Every target is named in the condition (there is no package to point
+    # at), so each is protected by default and opened here explicitly — and
+    # only these four. Committed, reviewed (ADR-0002 §4).
     unprotect:
+      - main.py
       - scripts/run_sleep_cycle.py
       - scripts/run_voice.py
       - scripts/trigger_briefing.py

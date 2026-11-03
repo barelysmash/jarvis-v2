@@ -515,8 +515,9 @@ class Sandbox:
             "\n… (truncated)" if len(matches) > 500 else ""
         )
 
-    def tool_write_file(self, path: str, content: str) -> str:
-        rel = self.relative(path)
+    def _refuse_write(self, rel: str) -> str | None:
+        """Why a write to ``rel`` is refused, or None if it may proceed."""
+
         if self.is_protected(rel):
             return (
                 f"REFUSED: {rel} is protected (tests, CI/tool config, contracts, "
@@ -528,8 +529,12 @@ class Sandbox:
                 f"REFUSED: {rel} is outside this routine's edit scope "
                 f"({', '.join(self.spec.paths)})."
             )
+        return None
+
+    def _commit_write(self, rel: str, previous: str | None, content: str) -> str:
+        """Write ``content`` to ``rel``; roll back if it busts the diff cap."""
+
         target = self.checkout / rel
-        previous = target.read_text(encoding="utf-8") if target.is_file() else None
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8", newline="\n")
         total = self.changed_lines()
@@ -551,6 +556,42 @@ class Sandbox:
             f"wrote {rel} ({len(content.splitlines())} lines; "
             f"branch now {total} changed lines)"
         )
+
+    def tool_write_file(self, path: str, content: str) -> str:
+        rel = self.relative(path)
+        refused = self._refuse_write(rel)
+        if refused:
+            return refused
+        target = self.checkout / rel
+        previous = target.read_text(encoding="utf-8") if target.is_file() else None
+        return self._commit_write(rel, previous, content)
+
+    def tool_edit_file(self, path: str, old: str, new: str) -> str:
+        """Replace one exact occurrence of ``old`` with ``new``.
+
+        The proposer's output is capped (MAX_MODEL_OUTPUT_TOKENS); a file of a
+        few hundred lines cannot be rewritten whole, so targeted edits are the
+        normal way to change anything that is not small. Same rails as
+        write_file.
+        """
+
+        rel = self.relative(path)
+        refused = self._refuse_write(rel)
+        if refused:
+            return refused
+        target = self.checkout / rel
+        if not target.is_file():
+            return f"ERROR: {rel} does not exist; use write_file to create it"
+        if not old:
+            return "ERROR: 'old' must not be empty"
+        previous = target.read_text(encoding="utf-8")
+        count = previous.count(old)
+        if count != 1:
+            return (
+                f"ERROR: 'old' must match exactly once in {rel}; it matches {count} "
+                "time(s). Include more surrounding lines to make it unique."
+            )
+        return self._commit_write(rel, previous, previous.replace(old, new, 1))
 
     def tool_run(self, name: str) -> str:
         command = self.spec.commands.get(name)
@@ -575,6 +616,12 @@ class Sandbox:
             if name == "write_file":
                 return self.tool_write_file(
                     str(args.get("path", "")), str(args.get("content", ""))
+                )
+            if name == "edit_file":
+                return self.tool_edit_file(
+                    str(args.get("path", "")),
+                    str(args.get("old", "")),
+                    str(args.get("new", "")),
                 )
             if name == "run":
                 return self.tool_run(str(args.get("name", "")))
@@ -603,10 +650,30 @@ TOOLS: Final[list[dict[str, Any]]] = [
         },
     },
     {
+        "name": "edit_file",
+        "description": (
+            "Replace one exact occurrence of 'old' with 'new' in a file. 'old' "
+            "must match exactly once (include surrounding lines to disambiguate). "
+            "Use this for any file that is not small; your output is capped and a "
+            "whole-file write of a long file will be cut off. Same scope rules as "
+            "write_file."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "old": {"type": "string"},
+                "new": {"type": "string"},
+            },
+            "required": ["path", "old", "new"],
+        },
+    },
+    {
         "name": "write_file",
         "description": (
-            "Replace a file's full contents. Only paths inside the edit scope; "
-            "tests, CI/tool config and contract files are refused."
+            "Create a file or replace a SMALL file's full contents. Only paths "
+            "inside the edit scope; tests, CI/tool config and contract files are "
+            "refused. For existing files of more than ~150 lines use edit_file."
         ),
         "input_schema": {
             "type": "object",
@@ -679,8 +746,10 @@ def system_prompt(routine: Routine, spec: GoalSpec, sandbox: Sandbox) -> str:
         "the code.\n"
         f"Named commands you can run: {', '.join(sorted(spec.commands))}.\n"
         f"Budget: {spec.budget['iterations']} iterations, {spec.max_changed_lines} "
-        "changed lines total. Prefer targeted edits; replace whole files only "
-        "when small.\n"
+        "changed lines total. Use edit_file for targeted changes; write_file only "
+        "to create a file or replace a small one — your output per turn is capped "
+        f"at {MAX_MODEL_OUTPUT_TOKENS} tokens and a long whole-file write will be "
+        "cut off.\n"
         "If the condition cannot be met within the rules (needs a new dependency, a "
         "test change, or a design decision), say so plainly in text and end your turn "
         "without editing; a person will read the transcript."

@@ -211,10 +211,27 @@ class RegistryTests(_Fixture):
             "condition mismatch": {"commands": {"condition": "echo no"}},
             "bad command name": {"commands": {"Bad Name": "echo"}},
             "escaping path": {"paths": ["../x/**"]},
+            "condition names a writable file": {
+                "condition": f"{PY} -m mypy src/pkg/calc.py",
+                "commands": {},
+            },
         }
         for label, over in cases.items():
             with self.subTest(label), self.assertRaises(RoutineConfigError):
                 self.routine("file:///x", **over)
+
+    def test_condition_may_name_a_writable_file_if_unprotected(self) -> None:
+        r = self.routine(
+            "file:///x",
+            condition=f"{PY} -m mypy src/pkg/calc.py",
+            commands={},
+            unprotect=["src/pkg/calc.py"],
+        )
+        assert r.goal is not None
+        self.assertEqual(r.goal.unprotect, ("src/pkg/calc.py",))
+        # a directory target is fine without unprotect
+        r = self.routine("file:///x", condition=f"{PY} -m mypy src", commands={})
+        assert r.goal is not None
 
     def test_shell_kind_still_requires_script(self) -> None:
         with self.assertRaises(RoutineConfigError):
@@ -269,6 +286,41 @@ class SandboxTests(_Fixture):
             self.sb.tool_write_file("src/pkg/calc.py", FIXED).startswith("wrote")
         )
         self.assertIn("exit 0", self.sb.tool_run("check"))
+
+    def test_edit_file(self) -> None:
+        sb = self.sb
+        # same rails as write_file
+        self.assertTrue(sb.tool_edit_file("check.py", "a", "b").startswith("REFUSED"))
+        self.assertTrue(sb.tool_edit_file("README.md", "a", "b").startswith("REFUSED"))
+        self.assertTrue(
+            sb.tool_edit_file("src/pkg/new.py", "a", "b").startswith(
+                "ERROR: src/pkg/new.py does not exist"
+            )
+        )
+        self.assertTrue(
+            sb.tool_edit_file("src/pkg/calc.py", "", "b").startswith("ERROR")
+        )
+        # must match exactly once
+        out = sb.tool_edit_file("src/pkg/calc.py", "nope", "x")
+        self.assertIn("matches 0 time(s)", out)
+        out = sb.tool_edit_file(
+            "src/pkg/calc.py", "b", "x"
+        )  # 'b' appears several times
+        self.assertIn("must match exactly once", out)
+        # the targeted edit
+        out = sb.tool_edit_file("src/pkg/calc.py", "return a - b", "return a + b")
+        self.assertTrue(out.startswith("wrote src/pkg/calc.py"), out)
+        self.assertEqual((self.checkout / "src/pkg/calc.py").read_text(), FIXED)
+        self.assertEqual(sb.writes, ["src/pkg/calc.py"])
+        self.assertIn("exit 0", sb.tool_run("check"))
+        # the diff cap applies and rolls back
+        big = "x = 1\n" * 60
+        out = sb.tool_edit_file(
+            "src/pkg/calc.py", "return a + b", "return a + b\n" + big
+        )
+        self.assertTrue(out.startswith("REFUSED: that write would bring"), out)
+        self.assertEqual((self.checkout / "src/pkg/calc.py").read_text(), FIXED)
+        self.assertTrue(sb.too_large_hit)
 
 
 class RunTests(_Fixture):

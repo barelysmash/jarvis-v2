@@ -149,8 +149,17 @@ satisfy mypy while breaking them — that one command is
 `scripts/goal_check.py -- <cmd> -- <cmd> ...`: each part runs in order under
 a header, the first failure stops it and its exit code is the result. The
 script sits in `scripts/` and is named by the condition, so the proposer
-cannot edit it. Point the condition at the *package* (`orchestrator`), not
-the file you want fixed: a file named in the condition is protected.
+cannot edit it. Point the condition at the *package* (`orchestrator`,
+`server`), not the file you want fixed: a file named in the condition is
+protected — the first backlog run stalled on exactly that, with the
+proposer correctly reporting the contradiction. Where there is no package
+to point at (a script, `main.py`), list the targets under `unprotect:`;
+that is the reviewed exception the rails allow.
+
+**Large files.** The proposer's output per turn is capped (8k tokens), so
+it cannot rewrite a file of more than a few hundred lines with
+`write_file`. It has `edit_file(path, old, new)` — one exact match
+replaced — for everything else, and the prompt tells it so.
 
 What a run leaves under `~/jarvis-data/routines/<name>/`:
 
