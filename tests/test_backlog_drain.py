@@ -119,7 +119,15 @@ class LoaderTests(_Fixture):
         for e in entries:
             self.assertTrue(e.task, f"{e.name}: give it a task line")
             tasks = (REPO / "TASKS.md").read_text(encoding="utf-8").splitlines()
-            hits = [ln for ln in tasks if ln.strip() == f"- [ ] {e.task}"]
+            # Open, or ticked by a green drain run: the goal branch carries the
+            # tick, so CI on that branch (and on main until the entry is
+            # deleted) sees `- [x] <task> — DONE ...`.
+            hits = [
+                ln
+                for ln in tasks
+                if ln.strip() == f"- [ ] {e.task}"
+                or ln.strip().startswith(f"- [x] {e.task}")
+            ]
             self.assertEqual(
                 len(hits), 1, f"{e.name}: task line must be in TASKS.md once"
             )
@@ -192,7 +200,8 @@ class DrainTests(_Fixture):
         self.url = make_target(self.root)
         self.target = self.root / "target"
         (self.target / "TASKS.md").write_text(
-            f"# Tasks\n\n- [ ] Something else\n- [ ] {TASK}\n", encoding="utf-8"
+            f"# Tasks\n\n- [ ] Something else\n      - [ ] {TASK}\n",
+            encoding="utf-8",
         )
         git("add", "-A", cwd=self.target)
         git("commit", "-q", "-m", "tasks", cwd=self.target)
@@ -240,7 +249,9 @@ class DrainTests(_Fixture):
         git("am", "-q", rec.patch, cwd=fresh)
         tasks = (fresh / "TASKS.md").read_text(encoding="utf-8")
         self.assertIn("- [ ] Something else", tasks)
-        self.assertIn(f"- [x] {TASK} — DONE {rec.last_run[:10]} (backlog-drain)", tasks)
+        self.assertIn(
+            f"\n      - [x] {TASK} — DONE {rec.last_run[:10]} (backlog-drain)\n", tasks
+        )
         self.assertEqual((fresh / "src" / "pkg" / "calc.py").read_text(), FIXED)
 
         # same base: nothing to do, and no model call

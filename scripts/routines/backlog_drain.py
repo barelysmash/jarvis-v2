@@ -218,7 +218,11 @@ def tick_task(
         if len(hits) != 1:
             return f"task not ticked: {len(hits)} match(es) for {needle!r}"
         done = f"- [x] {task} — DONE {today} ({ROUTINE})"
-        lines = [done if ln.strip() == needle else ln for ln in text.splitlines()]
+        # Keep the line's own indentation: a nested item must stay nested.
+        lines = [
+            ln[: len(ln) - len(ln.lstrip())] + done if ln.strip() == needle else ln
+            for ln in text.splitlines()
+        ]
         tasks.write_text(
             "\n".join(lines) + ("\n" if text.endswith("\n") else ""), encoding="utf-8"
         )
