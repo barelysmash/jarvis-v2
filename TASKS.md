@@ -1,6 +1,6 @@
 # Jarvis v2 — Task Board
 
-*Updated 2026-07-08 · Architecture source of truth: [JAM](https://github.com/barelysmash/JAM)*
+*Updated 2026-11-10 (HUD v2.18) · Architecture source of truth: [JAM](https://github.com/barelysmash/JAM)*
 
 ## Ecosystem (from JAM)
 
@@ -21,10 +21,16 @@ Operational Intelligence      Trading Intelligence
 > JARVIS coordinates decisions. — JAM Core Principle
 
 ## Up next — HUD / UI
-- [ ] Expand chat window (more real estate for conversation pane)
+- [x] Expand chat window (more real estate for conversation pane) — DONE 2026-07-12 (c333842)
 - [ ] Response pop-up/modal — surface JARVIS replies in a readable overlay
-- [ ] Shrink tool activity panel to accommodate the above
-- [ ] Status color system — thinking / responding / idle / very idle (port from JarvisV1)
+- [x] Shrink tool activity panel to accommodate the above — DONE v2.16 (collapsible ToolFeedPanel)
+- [x] Status color system — thinking / responding / idle / very idle (port from JarvisV1) — DONE v2.16 (iris state colouring)
+- [x] Cockpit: second-screen full-detail view — DONE v2.17 (docs/COCKPIT.md)
+- [x] Subagent constellation under the lens — DONE v2.18
+- [ ] Redo the core JARVIS animation (the orb itself; v2.16/v2.18 only added
+      state colouring and the constellation)
+- [ ] Phone test for the VoiceOrb / AmbientLayer crash (WebGL / memory pressure
+      suspected on mobile; both components untouched since the July import)
 - [ ] Very-idle arcade mode — self-playing tic-tac-toe / Tetris when nothing's happening.
       Pure-frontend minimax self-play to start; any input or ws activity ends the game.
 
@@ -35,11 +41,20 @@ Operational Intelligence      Trading Intelligence
       First deployment: Fonda San Miguel. (5 open issues on the repo.)
 - [ ] Build out **Friday** — Trading Intelligence subagent overseeing
       BarelyTrade / BarelySwingTrade / BarelyDayTrade engines.
-- [ ] Register Atlas + Friday as MCP-server workers in `agents.yaml`
+- [x] Agents registry (`config/agents.yaml`, adapter + mcp-stdio transports) —
+      DONE 2026-09-10 (1b70c43). Registered: tavily, barelyswing, friday, muse,
+      sparrow.
+- [ ] Register **Atlas** in `agents.yaml` (Friday is in; Atlas is only seen by
+      the conformance sweep)
       (star-pattern rule: no new domain skills inside Jarvis itself)
+- [ ] Task-specific agents under JARVIS as orchestrator (beyond the five above)
+- [ ] Consigliere: an advisor for JARVIS that runs on a later model
+- [ ] Expand tools
 - [ ] **Loop automation** — Jarvis runs tasks unattended:
       - Session isolation per routine run (fresh conversation, never the shared
-        singleton — non-negotiable for unattended operation)
+        singleton — non-negotiable for unattended operation). Shell and goal
+        routines already run with no brain and no shared session; a
+        brain-driven routine kind would still need it.
       - [x] GoalRunner — built per docs/adr/ADR-0002-goal-runner.md
         (`orchestrator/goal_runner.py`, `kind: goal`) — DONE 2026-10-21
       - [x] Probe `jarvis-memory-mypy` on guildenstern, then flip
@@ -72,10 +87,19 @@ Operational Intelligence      Trading Intelligence
 
 ## Quality of life
 - [x] ssh-agent setup on rosencrantz (kill the 5x passphrase prompts per deploy) — DONE 2026-10-21 (~/.bashrc agent block + AddKeysToAgent in ~/.ssh/config; ControlMaster is unreliable on MSYS)
-- [ ] Find where uvicorn logs actually go (not journald; check ~/jarvis-data/logs/)
+- [x] Find where uvicorn logs actually go — `~/jarvis-data/logs/api.log` and
+      `api.err.log`; unit runs with `PYTHONUNBUFFERED=1` since b8b8d77 (2026-09-11)
 - [ ] Rename `tools/integrations/calendar.py` → `gcal.py` (stdlib shadow;
       caused the reauth-script import crash). Touches imports in tools.py.
-- [ ] `.gitattributes` with `* text=auto eol=lf` (silence CRLF warnings)
+- [x] `.gitattributes` with `* text=auto eol=lf` (silence CRLF warnings) — DONE 2026-10-21 (#18)
+- [ ] Barge-in (`BARGE_ENABLED`, off by default) — blocked on separate mic and
+      speaker hardware; one Bluetooth speaker as both self-triggers
+- [ ] Market data collector: consolidate from rosencrantz to guildenstern
+      (yfinance is rate-limited from the Azure IP; not urgent)
+- [ ] Sparrow: Openverse calls time out from guildenstern — register for
+      Openverse API credentials and/or configure Unsplash / Pexels keys
+- [ ] Sparrow: migrate to mcp 2.x, then drop the `mcp>=1.0,<2` pin in
+      requirements.txt
 - [ ] SPA catch-all for StaticFiles if HUD ever gets client-side routes
 - [x] JAM: fill in Standards "coming soon" sections — DONE 2026-10-26: JAM #34
       (Unattended Automation) and #35 (Deployment, Secrets, Agent Registration),
