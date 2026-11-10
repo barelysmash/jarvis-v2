@@ -61,9 +61,17 @@ fi
 echo "==> Restarting $SERVICE..."
 ssh "$HOST" "systemctl --user restart $SERVICE"
 
-echo "==> Waiting for health check..."
-sleep 2
-CODE=$(curl -s -o /dev/null -w "%{http_code}" "http://100.113.110.44:8765/api/health" || echo "000")
+# The API takes several seconds to come up after a restart (agents registry,
+# memory stores), so poll instead of probing once: a single early probe gets
+# connection-refused and reports a healthy deploy as failed.
+echo "==> Waiting for health check (up to ${HEALTH_TIMEOUT:-30}s)..."
+CODE="000"
+for ((i = 0; i < ${HEALTH_TIMEOUT:-30}; i += 2)); do
+  sleep 2
+  # curl prints 000 itself when it cannot connect; no fallback echo needed.
+  CODE=$(curl -s -o /dev/null -m 5 -w "%{http_code}" "http://100.113.110.44:8765/api/health" || true)
+  [[ "$CODE" == "200" ]] && break
+done
 if [[ "$CODE" == "200" ]]; then
   echo "==> DEPLOYED. Health check OK. Hard-refresh the HUD (Ctrl+Shift+R)."
 else
