@@ -55,7 +55,7 @@ Operational Intelligence      Trading Intelligence
         `config/backlog.yaml` of goal specs → `backlog-drain` routine, Sun 06:00,
         one entry per fire; TASKS.md is never parsed, but a green run ticks the
         entry's `task:` line below — DONE 2026-10-25
-      - [ ] `server/api.py` strict (4 findings) — backlog entry server-api-mypy
+- [x] `server/api.py` strict (4 findings) — backlog entry server-api-mypy — DONE 2026-11-03 (backlog-drain)
       - [ ] `load_dotenv` conditional-def strict findings in main.py / scripts — backlog entry dotenv-shim-mypy
       - [x] `routines.yaml` scheduled via systemd timers — DONE 2026-10-20
         (`config/routines.yaml` → generated `jarvis-routine-*` units,
