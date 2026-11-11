@@ -175,6 +175,14 @@ class AtlasBoundaryTests(unittest.TestCase):
 
         self.assertIn("SOURCE BOUNDARY — ATLAS", rendered)
         self.assertIn("withholds absolute figures", rendered)
+
+    def test_boundary_covers_implied_size_causes_and_drill_downs(self):
+        rendered = ground_tool_result("atlas_operating_summary", {"changes": []})
+
+        # Each of these was overstepped in the first live answer (2026-11-11).
+        self.assertIn("small, large, low or high base", rendered)
+        self.assertIn("Report what moved, not why", rendered)
+        self.assertIn("Do not offer nightly detail", rendered)
         self.assertIn("'changes': []", rendered)
 
     def test_boundary_is_not_applied_to_other_tools(self):
