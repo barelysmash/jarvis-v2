@@ -44,9 +44,13 @@ Operational Intelligence      Trading Intelligence
 - [x] Agents registry (`config/agents.yaml`, adapter + mcp-stdio transports) —
       DONE 2026-09-10 (1b70c43). Registered: tavily, barelyswing, friday, muse,
       sparrow.
-- [ ] Register **Atlas** in `agents.yaml` (Friday is in; Atlas is only seen by
-      the conformance sweep)
+- [x] Register **Atlas** in `agents.yaml` — DONE 2026-11-11: `atlas` adapter
+      over Atlas's RestaurantOS peer API (127.0.0.1:8790). Read-only, relative
+      figures only; two tools, `atlas_operating_summary` and `atlas_freshness`.
       (star-pattern rule: no new domain skills inside Jarvis itself)
+- [ ] Atlas: emit JAM Decisions from the Fonda ledger and expose them (the
+      peer API serves period comparisons only; atlas-core's decision engine is
+      not run on nightly data yet)
 - [ ] Task-specific agents under JARVIS as orchestrator (beyond the five above)
 - [ ] Consigliere: an advisor for JARVIS that runs on a later model
 - [ ] Expand tools
