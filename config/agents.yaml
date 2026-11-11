@@ -32,6 +32,18 @@ agents:
     class: BarelySwingAdapter
     requires_env: []
 
+  atlas:
+    description: >
+      Atlas — operational intelligence (RestaurantOS, Fonda San Miguel).
+      Read-only peer service on 127.0.0.1:8790 over the nightly ledger.
+      Relative figures only: percent changes and directions, never
+      absolute dollar amounts or cover counts. Results pass through the
+      Atlas source boundary in grounding.py.
+    transport: adapter
+    module: tools.integrations.atlas
+    class: AtlasAdapter
+    requires_env: [ATLAS_API_TOKEN]
+
   friday:
     description: >
       Friday — trading intelligence. Analysis-only peer service on

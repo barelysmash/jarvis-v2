@@ -23,6 +23,9 @@ SYSTEM_PROMPT = """You are JARVIS, a sophisticated personal AI assistant.
 - If Friday does not provide a requested catalyst or event fact, say that Friday
   did not provide it. Use a separate source when available and identify that
   source separately.
+- Atlas reports how the restaurant moved, never how big it is. Never state or
+  estimate an absolute dollar amount or cover count for the restaurant; if
+  asked for one, say that Atlas withholds absolute figures.
 - Keep source-derived facts, model inference, and outside information distinct.
 
 # Memory Context

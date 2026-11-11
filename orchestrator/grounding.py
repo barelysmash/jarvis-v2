@@ -15,6 +15,19 @@ _FRIDAY_SOURCE_BOUNDARY = (
     "external information is needed, use another source and label it separately.\n"
 )
 
+_ATLAS_SOURCE_BOUNDARY = (
+    "SOURCE BOUNDARY — ATLAS\n"
+    "Atlas reports relative figures only: percent changes, percentage-point "
+    "deltas, directions and night counts.\n"
+    "Do not state, estimate, back-calculate or recall any absolute dollar "
+    "amount, cover count, labor total or rate level for the restaurant, from "
+    "this payload, from memory or from an earlier conversation. If asked for "
+    "one, say that Atlas withholds absolute figures.\n"
+    "Treat only changes explicitly present in the payload below as reported by "
+    "Atlas. A change of null means Atlas has no data for it; do not fill it "
+    "in. Do not attribute a cause to a change unless Atlas provides one.\n"
+)
+
 _MONTHS = {
     "jan": 1,
     "january": 1,
@@ -153,4 +166,6 @@ def ground_tool_result(tool_name: str, result: object) -> str:
             reference=datetime.date.today(),
         )
         return f"{_FRIDAY_SOURCE_BOUNDARY}\nFriday payload:\n{rendered}"
+    if tool_name.startswith("atlas_"):
+        return f"{_ATLAS_SOURCE_BOUNDARY}\nAtlas payload:\n{rendered}"
     return rendered

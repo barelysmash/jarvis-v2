@@ -102,7 +102,9 @@ class ToolRegistry:
         # Friday is a source-bound analysis service. Give the reasoning model a
         # provenance contract together with the payload so facts absent from the
         # service cannot be casually attributed to Friday during synthesis.
-        if name.startswith("friday_"):
+        # Atlas is source-bound too, and relative-only: its boundary also tells
+        # the model not to supply the absolute figures Atlas withholds.
+        if name.startswith(("friday_", "atlas_")):
             return (ground_tool_result(name, result), False)
 
         return (result, False)
