@@ -183,6 +183,15 @@ class AtlasBoundaryTests(unittest.TestCase):
         self.assertIn("small, large, low or high base", rendered)
         self.assertIn("Report what moved, not why", rendered)
         self.assertIn("Do not offer nightly detail", rendered)
+
+    def test_boundary_covers_margin_cross_period_links_and_coverage(self):
+        rendered = ground_tool_result("atlas_operating_summary", {"changes": []})
+
+        # Each was missing or overstepped in the second live answer (2026-11-11).
+        self.assertIn("Atlas reports no margin", rendered)
+        self.assertIn("belongs to the two periods it compares", rendered)
+        self.assertIn("nights_missing and nights_in_review", rendered)
+        self.assertIn("do not claim the period is complete", rendered)
         self.assertIn("'changes': []", rendered)
 
     def test_boundary_is_not_applied_to_other_tools(self):

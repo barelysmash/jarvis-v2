@@ -148,7 +148,9 @@ class AtlasAdapter:
                 "directions — never dollar amounts or cover counts. With no "
                 "dates it compares month to date against the same days of the "
                 "prior month. With start_date and end_date only, it compares "
-                "against the equal-length window just before. Read-only."
+                "against the equal-length window just before. Each period "
+                "also reports how many nights are missing or in review. "
+                "Read-only."
             ),
             schema={
                 "type": "object",
