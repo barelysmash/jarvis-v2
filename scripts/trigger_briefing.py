@@ -56,6 +56,16 @@ def main():
         except Exception as exc:
             print(f"[briefing] Calendar setup failed: {exc}")
 
+    # Atlas, for the staleness alarm only. Skipped without a token, exactly
+    # as the agents registry skips it in the API server.
+    if os.environ.get("ATLAS_API_TOKEN"):
+        try:
+            from tools.integrations.atlas import AtlasAdapter
+
+            AtlasAdapter().register(tools)
+        except Exception as exc:
+            print(f"[briefing] Atlas setup failed: {exc}")
+
     brain = JarvisBrain(
         api_key=api_key, memory=memory, tools=tools, origin="briefing"
     )
