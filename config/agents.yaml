@@ -23,6 +23,16 @@ agents:
     class: TavilyAdapter
     requires_env: [TAVILY_API_KEY]
 
+  spotify:
+    description: >
+      Spotify playback by voice: what is playing, play / pause / skip,
+      search-and-play, volume, and moving playback between devices. Shares
+      the client the HUD miniplayer uses.
+    transport: adapter
+    module: tools.integrations.spotify
+    class: SpotifyAdapter
+    requires_env: [SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, SPOTIFY_REFRESH_TOKEN]
+
   barelyswing:
     description: >
       BarelySwingTrade — read the swing book, arm/disarm the engine.
