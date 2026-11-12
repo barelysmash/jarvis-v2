@@ -56,6 +56,11 @@ Operational Intelligence      Trading Intelligence
 - [ ] Task-specific agents under JARVIS as orchestrator (beyond the five above)
 - [ ] Consigliere: an advisor for JARVIS that runs on a later model
 - [ ] Expand tools
+      - [x] Spotify by voice — DONE 2026-11-11: six `spotify_` tools over the
+        client the HUD miniplayer uses (now playing, transport, search-and-play,
+        volume, devices, transfer)
+      - [ ] Reminders and timers
+      - [ ] Memory, routines, weather and system status as callable tools
 - [ ] **Loop automation** — Jarvis runs tasks unattended:
       - Session isolation per routine run (fresh conversation, never the shared
         singleton — non-negotiable for unattended operation). Shell and goal
