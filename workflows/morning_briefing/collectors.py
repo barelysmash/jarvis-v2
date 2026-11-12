@@ -40,6 +40,7 @@ class BriefingCollectors:
             self._unread_messages(),
             self._tracked_items(),
             self._smart_home_status(),
+            self._atlas_freshness(),
             return_exceptions=True,
         )
 
@@ -51,6 +52,7 @@ class BriefingCollectors:
             "messages",
             "tracked",
             "home",
+            "atlas",
         ]
         return {
             k: (v if not isinstance(v, Exception) else None)
@@ -176,3 +178,42 @@ class BriefingCollectors:
             self.tools.execute, "home_status", {}
         )
         return _unwrap(ret)
+
+    async def _atlas_freshness(self):
+        """How current Atlas's restaurant ledger is, for the staleness alarm.
+
+        Returns None when Atlas is not registered (nothing to watch), a dict
+        with status "unreachable" when it is registered but did not answer,
+        and otherwise Atlas's freshness payload with status "ok".
+
+        Calls the registered handler directly: ToolRegistry.execute() wraps
+        atlas_ results in the source-boundary text meant for the model, and
+        this check needs the structured dates, not prose.
+        """
+        from orchestrator import event_log
+
+        entry = self.tools._tools.get("atlas_freshness")
+        if entry is None:
+            return None
+
+        def emit(status: str) -> None:
+            event_log.emit(
+                source="briefing",
+                event_type="tool",
+                payload={"name": "atlas_freshness", "args": {}, "status": status},
+            )
+
+        emit("running")
+        try:
+            result = await asyncio.to_thread(entry["handler"])
+        except Exception as exc:
+            emit("error")
+            logger.warning("atlas_freshness failed: %s", exc)
+            return {"status": "unreachable", "error": str(exc)}
+
+        data = result.get("data") if isinstance(result, dict) else None
+        if not isinstance(data, dict):
+            emit("error")
+            return {"status": "unreachable", "error": "unexpected response"}
+        emit("success")
+        return {"status": "ok", **data}

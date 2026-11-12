@@ -1,5 +1,51 @@
 """Briefing analyzer: finds anomalies, conflicts, and callbacks."""
 
+import os
+from datetime import date
+
+# The restaurant closes one night a week, so a Monday briefing normally sees
+# a two-day-old ledger. Past this many days, the feed has stopped.
+DEFAULT_ATLAS_STALE_DAYS = 3
+
+
+def atlas_stale_days() -> int:
+    try:
+        return max(1, int(os.environ.get("ATLAS_STALE_DAYS", "")))
+    except ValueError:
+        return DEFAULT_ATLAS_STALE_DAYS
+
+
+def atlas_alerts(atlas: object, stale_days: int | None = None) -> list[str]:
+    """Alarm lines for a stale or silent Atlas. Empty when all is well.
+
+    Deterministic on purpose: these are appended to the briefing verbatim,
+    not handed to the model to mention or skip. A feed that stopped for two
+    weeks in October 2026 went unnoticed because nothing said so.
+    """
+    if not isinstance(atlas, dict):
+        return []  # Atlas is not registered: nothing to watch.
+    if atlas.get("status") != "ok":
+        return [
+            "Atlas alert: the restaurant service did not answer this morning, "
+            "so I cannot tell whether its ledger is current."
+        ]
+
+    limit = stale_days if stale_days is not None else atlas_stale_days()
+    last = atlas.get("last_service_date")
+    days = atlas.get("days_since_last_service")
+    if last is None or not isinstance(days, int):
+        return ["Atlas alert: the restaurant ledger has no service nights on record."]
+    if days <= limit:
+        return []
+    try:
+        spoken = date.fromisoformat(str(last)).strftime("%A, %B %-d")
+    except ValueError:
+        spoken = str(last)
+    return [
+        f"Atlas alert: no nightly report has reached the ledger since {spoken}. "
+        f"That is {days} days. The report feed may have stopped."
+    ]
+
 
 class BriefingAnalyzer:
     """Identifies anomalies, conflicts, and callbacks worth surfacing."""
@@ -14,6 +60,7 @@ class BriefingAnalyzer:
             "callbacks": self._find_callbacks(collected),
             "anomalies": self._find_anomalies(collected),
             "priorities": self._rank_priorities(collected),
+            "alerts": atlas_alerts(collected.get("atlas")),
         }
 
     def _find_conflicts(self, calendar) -> list:

@@ -48,6 +48,8 @@ Operational Intelligence      Trading Intelligence
       over Atlas's RestaurantOS peer API (127.0.0.1:8790). Read-only, relative
       figures only; two tools, `atlas_operating_summary` and `atlas_freshness`.
       (star-pattern rule: no new domain skills inside Jarvis itself)
+- [x] Atlas staleness alarm in the morning briefing — DONE 2026-11-11
+      (alarm past `ATLAS_STALE_DAYS`, default 3, or when Atlas does not answer)
 - [ ] Atlas: emit JAM Decisions from the Fonda ledger and expose them (the
       peer API serves period comparisons only; atlas-core's decision engine is
       not run on nightly data yet)

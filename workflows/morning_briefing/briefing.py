@@ -65,6 +65,12 @@ class MorningBriefingWorkflow(Workflow):
             if preparations:
                 briefing_text += f"\n\n{preparations}"
 
+            # Alarms are appended verbatim, after the composed text, so the
+            # model can neither drop nor soften them.
+            alerts = analysis.get("alerts") or []
+            if alerts:
+                briefing_text += "\n\n" + " ".join(alerts)
+
             # 5. Deliver
             if speak and "speak" in self.tools._tools:
                 self.tools.execute("speak", {"text": briefing_text})
@@ -82,6 +88,7 @@ class MorningBriefingWorkflow(Workflow):
                     analysis.get("callbacks", [])
                 ),
                 "conflicts_flagged": len(analysis.get("conflicts", [])),
+                "alerts": list(alerts),
             }
 
             self.log_execution(result)
