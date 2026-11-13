@@ -23,6 +23,16 @@ agents:
     class: TavilyAdapter
     requires_env: [TAVILY_API_KEY]
 
+  reminders:
+    description: >
+      Reminders and timers. Stored in the JARVIS data directory; the API
+      server's scheduler announces each one on the HUD and by voice when
+      it comes due, and holds it for the next client if none is connected.
+    transport: adapter
+    module: tools.integrations.reminders
+    class: ReminderAdapter
+    requires_env: []
+
   spotify:
     description: >
       Spotify playback by voice: what is playing, play / pause / skip,

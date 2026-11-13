@@ -16,6 +16,8 @@ from orchestrator.memory.store import MemoryStore
 from orchestrator.tools import ToolRegistry
 
 from .events import bus, emit_jarvis_speech, emit_state, emit_user_speech
+from orchestrator.reminders import get_store as get_reminder_store
+from server.reminder_scheduler import run_scheduler, unseen_events
 from server.spotify_client import spotify_client
 
 logger = logging.getLogger(__name__)
@@ -82,6 +84,9 @@ async def lifespan(app: FastAPI):
     calendar_task = asyncio.create_task(_calendar_publisher())
     heatmap_task = asyncio.create_task(_heatmap_publisher())
     spotify_task = asyncio.create_task(_spotify_publisher())
+    reminder_task = asyncio.create_task(
+        run_scheduler(get_reminder_store(), bus.publish, lambda: len(bus.subscribers))
+    )
 
     yield
 
@@ -94,7 +99,8 @@ async def lifespan(app: FastAPI):
     calendar_task.cancel()
     heatmap_task.cancel()
     spotify_task.cancel()
-    for task in (poller_task, metrics_task, stocks_task, news_task, weather_task, calendar_task, heatmap_task, spotify_task):
+    reminder_task.cancel()
+    for task in (poller_task, metrics_task, stocks_task, news_task, weather_task, calendar_task, heatmap_task, spotify_task, reminder_task):
         try:
             await task
         except asyncio.CancelledError:
@@ -259,6 +265,13 @@ async def websocket_endpoint(ws: WebSocket):
             await ws.send_json(cached)
         except Exception:
             break
+    # Reminders that came due while nothing was connected: hand them to
+    # this client now, so they arrive late instead of never.
+    try:
+        for missed in await unseen_events(get_reminder_store()):
+            await ws.send_json(missed)
+    except Exception as exc:
+        logger.warning("Unseen reminder replay failed: %s", exc)
     try:
         while True:
             event = await queue.get()

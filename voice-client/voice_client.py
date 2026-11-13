@@ -32,6 +32,8 @@ env (client-side .env on rosencrantz, NOT ~/jarvis/deploy/.env):
                               #   OFF by default — on speakers it self-triggers (echo).
                               #   set true ONLY with headphones.
   BARGE_THRESHOLD=0.7         # mid-reply interrupt sensitivity (only used if BARGE_ENABLED)
+  ANNOUNCE_ENABLED=true       # speak reminders and timers JARVIS announces on its own.
+                              #   set false to keep this machine silent unless spoken to.
 """
 
 import asyncio
@@ -67,6 +69,8 @@ BARGE_THRESHOLD   = float(os.environ.get("BARGE_THRESHOLD", "0.7"))   # stricter
 BARGE_ENABLED     = os.environ.get("BARGE_ENABLED", "false").lower() == "true"
 # Explicit input device index (from `python -m sounddevice`). Pinning avoids the
 # PortAudioError when the Bluetooth default drops/re-enumerates. None = system default.
+# Speak server-initiated announcements (reminders, timers) pushed over /ws.
+ANNOUNCE_ENABLED  = os.environ.get("ANNOUNCE_ENABLED", "true").lower() == "true"
 _mic = os.environ.get("MIC_DEVICE")
 MIC_DEVICE        = int(_mic) if _mic not in (None, "") else None
 
@@ -410,16 +414,83 @@ async def conversation_turn() -> None:
         print("[barge] go ahead.")
 
 
+def announcement_text(raw: str) -> str | None:
+    """The text to speak for one /ws message, or None if it is not for us.
+
+    Only ``announce`` events are spoken: reminders and timers JARVIS raises on
+    its own. Replies to something the user said arrive as ``conversation``
+    events too, but those are already spoken by conversation_turn().
+    """
+    try:
+        event = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(event, dict) or event.get("type") != "announce":
+        return None
+    data = event.get("data")
+    text = data.get("text") if isinstance(data, dict) else None
+    return text.strip() if isinstance(text, str) and text.strip() else None
+
+
+async def announce_listener(speaking: asyncio.Lock) -> None:
+    """Stay connected to jarvis-api's /ws and speak what it announces.
+
+    Runs alongside the wake-word loop. ``speaking`` is shared with it, so an
+    announcement waits for a conversation to finish and a conversation waits
+    for an announcement, instead of the two talking over each other.
+    """
+    ws_url = JARVIS_URL.replace("http", "ws", 1) + "/ws"
+    delay = 2.0
+    while True:
+        try:
+            async with websockets.connect(ws_url, ping_interval=20) as ws:
+                print("[announce] connected; reminders will be spoken here.")
+                delay = 2.0
+                async for msg in ws:
+                    text = announcement_text(msg)
+                    if text is None:
+                        continue
+                    print(f"[announce] {text}")
+
+                    async def one_chunk(line: str = text):
+                        yield line
+
+                    async with speaking:
+                        try:
+                            await speak(one_chunk())
+                        except Exception as e:
+                            print(f"[announce] speak failed: {e!r}", file=sys.stderr)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"[announce] disconnected ({e!r}); retrying in {delay:.0f}s",
+                  file=sys.stderr)
+        await asyncio.sleep(delay)
+        delay = min(delay * 2, 60.0)
+
+
 async def main() -> None:
     print(f"[init] barge-in {'ENABLED' if BARGE_ENABLED else 'disabled'} "
           f"(set BARGE_ENABLED=true in .env to interrupt mid-reply; headphones only).")
     loop = asyncio.get_event_loop()
-    while True:
-        await loop.run_in_executor(None, wait_for_wake_word)
-        try:
-            await conversation_turn()
-        except Exception as e:
-            print(f"[error] turn failed: {e}", file=sys.stderr)
+    speaking = asyncio.Lock()
+    if ANNOUNCE_ENABLED:
+        # Keep a reference: an unreferenced task can be garbage-collected.
+        listener = asyncio.create_task(announce_listener(speaking))
+    else:
+        listener = None
+        print("[init] announcements disabled (ANNOUNCE_ENABLED=false).")
+    try:
+        while True:
+            await loop.run_in_executor(None, wait_for_wake_word)
+            try:
+                async with speaking:
+                    await conversation_turn()
+            except Exception as e:
+                print(f"[error] turn failed: {e}", file=sys.stderr)
+    finally:
+        if listener is not None:
+            listener.cancel()
 
 
 if __name__ == "__main__":

@@ -59,7 +59,11 @@ Operational Intelligence      Trading Intelligence
       - [x] Spotify by voice — DONE 2026-11-11: six `spotify_` tools over the
         client the HUD miniplayer uses (now playing, transport, search-and-play,
         volume, devices, transfer)
-      - [ ] Reminders and timers
+      - [x] Reminders and timers — DONE 2026-11-13: three `reminder_` tools, a
+        scheduler in the API server, HUD + spoken delivery (voice client
+        listens on /ws), held for the next client when none is connected
+      - [ ] Reminders: reach the phone (nothing is delivered away from the HUD
+        and the voice client yet)
       - [ ] Memory, routines, weather and system status as callable tools
 - [ ] **Loop automation** — Jarvis runs tasks unattended:
       - Session isolation per routine run (fresh conversation, never the shared
