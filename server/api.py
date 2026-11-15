@@ -64,6 +64,30 @@ async def lifespan(app: FastAPI):
     from orchestrator.agents import load_agents
     load_agents(tools)
 
+    # Built-ins over what this process already holds: memory, the weather
+    # and system feeds, the routine timers. Owned by "jarvis", not an agent.
+    from server.cockpit import _systemctl, collect_schedule
+    from tools.core_tools import CoreTools
+
+    def _start_service(service: str) -> None:
+        from orchestrator import event_log
+
+        _systemctl("start", "--no-block", service)
+        event_log.emit("jarvis", "job", {
+            "job": service.removesuffix(".service"),
+            "phase": "requested",
+            "summary": f"manual run of {service} requested by voice or chat",
+        })
+
+    CoreTools(
+        memory=memory,
+        widgets=lambda: last_widget_events,
+        agents=_agents_snapshot,
+        schedule=collect_schedule,
+        start_service=_start_service,
+        client_count=lambda: len(bus.subscribers),
+    ).register(tools)
+
     brain = JarvisBrain(
         api_key=api_key,
         user_name=os.environ.get("JARVIS_USER_NAME", "Sir"),
