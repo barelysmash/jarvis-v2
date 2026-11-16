@@ -64,7 +64,9 @@ Operational Intelligence      Trading Intelligence
         listens on /ws), held for the next client when none is connected
       - [ ] Reminders: reach the phone (nothing is delivered away from the HUD
         and the voice client yet)
-      - [ ] Memory, routines, weather and system status as callable tools
+      - [x] Memory, routines, weather and system status as callable tools —
+        DONE 2026-11-15: seven built-in tools in `tools/core_tools.py`
+      - [ ] Read a web page; Taxdesk adapter
 - [ ] **Loop automation** — Jarvis runs tasks unattended:
       - Session isolation per routine run (fresh conversation, never the shared
         singleton — non-negotiable for unattended operation). Shell and goal
