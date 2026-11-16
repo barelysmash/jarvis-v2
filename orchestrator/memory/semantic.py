@@ -59,12 +59,18 @@ class SemanticMemory:
             return list(documents[0])
         return []
 
-    def search_scored(self, query: str, k: int = 5) -> list[dict[str, Any]]:
+    def search_scored(
+        self, query: str, k: int = 5, *, record_access: bool = True
+    ) -> list[dict[str, Any]]:
         """Like search(), but each hit carries its similarity and category.
 
         Similarity is 1 minus the cosine distance: 1.0 is the same text,
         lower is looser. Callers that act on a match (deduplicating, showing
         the user what is stored) need it; search() callers do not.
+
+        ``record_access=False`` is for housekeeping lookups such as the
+        duplicate check, which must not make a fact look recently used to
+        the decay cycle.
         """
         results = self.collection.query(query_texts=[query], n_results=k)
         ids = results["ids"]
@@ -73,7 +79,8 @@ class SemanticMemory:
             return []
         distances = results["distances"]
         metadatas = results["metadatas"]
-        self._record_access(list(ids[0]))
+        if record_access:
+            self._record_access(list(ids[0]))
         hits: list[dict[str, Any]] = []
         for index, text in enumerate(documents[0]):
             distance = distances[0][index] if distances and distances[0] else 1.0

@@ -9,6 +9,7 @@ from typing import Any
 from unittest import mock
 
 from orchestrator.memory.semantic import SemanticMemory
+from orchestrator.memory.store import MemoryStore, normalize_fact
 from orchestrator.tools import ToolRegistry
 from tools.core_tools import CoreTools, _short_name
 
@@ -72,16 +73,15 @@ def make_semantic() -> SemanticMemory:
     return semantic
 
 
-class FakeMemory:
-    def __init__(self) -> None:
-        self.semantic = make_semantic()
-        self.episodic = mock.Mock()
-        self.episodic.search.return_value = [
-            {"date": "2026-11-10", "summary": "Talked about the bar menu."}
-        ]
-
-    def remember_fact(self, fact: str, category: str = "general") -> None:
-        self.semantic.add(fact, metadata={"category": category})
+def make_memory() -> MemoryStore:
+    """A real MemoryStore, minus the databases it would open on disk."""
+    memory = MemoryStore.__new__(MemoryStore)
+    memory.semantic = make_semantic()
+    memory.episodic = mock.Mock()
+    memory.episodic.search.return_value = [
+        {"date": "2026-11-10", "summary": "Talked about the bar menu."}
+    ]
+    return memory
 
 
 def widget(name: str, data: dict[str, Any], age_minutes: float = 1) -> dict[str, Any]:
@@ -111,7 +111,7 @@ def timer(name: str, **over: Any) -> dict[str, Any]:
 
 class Base(unittest.TestCase):
     def setUp(self) -> None:
-        self.memory = FakeMemory()
+        self.memory = make_memory()
         self.widgets: dict[str, dict[str, Any]] = {
             "weather": widget(
                 "weather", {"temp": 61, "condition": "Clear", "high": 70}
@@ -130,7 +130,7 @@ class Base(unittest.TestCase):
         self.started: list[str] = []
         self.registry = ToolRegistry()
         CoreTools(
-            memory=self.memory,  # type: ignore[arg-type]
+            memory=self.memory,
             widgets=lambda: self.widgets,
             agents=lambda: self.agents,
             schedule=lambda: self.timers,
@@ -190,6 +190,47 @@ class MemoryTests(Base):
             "memory_remember", {"fact": "the keg room code is 4417"}
         )
         self.assertTrue(result["already_known"])
+        self.assertEqual(len(self.memory.semantic.collection.rows), 1)
+
+    def test_automatic_extraction_cannot_re_add_an_explicit_fact(self) -> None:
+        # Seen live on 2026-11-16: the tool stored "The user's test fact is
+        # purple." and the brain's own extraction then added "User's test
+        # fact is purple" beside it.
+        self.run_tool("memory_remember", {"fact": "The user's test fact is purple."})
+
+        existing = self.memory.remember_fact("User's test fact is purple")
+
+        self.assertEqual(existing, "The user's test fact is purple.")
+        self.assertEqual(len(self.memory.semantic.collection.rows), 1)
+
+    def test_normalize_fact(self) -> None:
+        self.assertEqual(
+            normalize_fact("The user's test-fact is PURPLE."),
+            normalize_fact("User's test fact is purple"),
+        )
+        self.assertNotEqual(
+            normalize_fact("Paul closes on Tuesdays"),
+            normalize_fact("Paul closes on Tuesdays and Fridays"),
+        )
+
+    def test_distinct_facts_are_both_kept(self) -> None:
+        self.assertIsNone(self.memory.remember_fact("Paul closes on Tuesdays"))
+        self.assertIsNone(
+            self.memory.remember_fact("Paul closes on Tuesdays and Fridays")
+        )
+        self.assertEqual(len(self.memory.semantic.collection.rows), 2)
+
+    def test_the_duplicate_check_does_not_count_as_using_a_fact(self) -> None:
+        self.memory.remember_fact("The keg room code is 4417")
+        self.memory.remember_fact("the keg room code is 4417")
+        ((_, meta),) = self.memory.semantic.collection.rows.values()
+        self.assertEqual(meta["access_count"], 0)
+
+    def test_a_failed_duplicate_check_still_stores_the_fact(self) -> None:
+        with mock.patch.object(
+            self.memory.semantic, "search_scored", side_effect=RuntimeError("db")
+        ):
+            self.assertIsNone(self.memory.remember_fact("Still stored"))
         self.assertEqual(len(self.memory.semantic.collection.rows), 1)
 
     def test_forget_deletes_only_the_exact_fact(self) -> None:
@@ -300,13 +341,45 @@ class RoutineTests(Base):
                 self.assertIn(expect, str(result))
         self.assertEqual(self.started, [])
 
+    def test_timers_outside_the_allow_list_are_listed_but_not_started(self) -> None:
+        self.timers += [
+            timer("barelyswing-premarket"),
+            timer("systemd-tmpfiles-clean"),
+            timer("atlas-restaurantos-nightly"),
+        ]
+        listed, _ = self.run_tool("routines_list")
+        allowed = {r["name"]: r["can_run_by_voice"] for r in listed["routines"]}
+        self.assertFalse(allowed["barelyswing premarket"])
+        self.assertFalse(allowed["systemd tmpfiles clean"])
+        self.assertTrue(allowed["restaurantos nightly"])
+        self.assertTrue(allowed["briefing"])
+
+        for name in ("barelyswing premarket", "tmpfiles"):
+            result, is_error = self.run_tool("routine_run", {"name": name})
+            self.assertTrue(is_error, name)
+            self.assertIn("not one I am allowed to start", str(result))
+        self.assertEqual(self.started, [])
+
+        self.run_tool("routine_run", {"name": "restaurantos nightly"})
+        self.assertEqual(self.started, ["atlas-restaurantos-nightly.service"])
+
+    def test_the_allow_list_is_configurable(self) -> None:
+        self.timers.append(timer("barelyswing-premarket"))
+        with mock.patch.dict(
+            "os.environ", {"JARVIS_RUN_TIMERS": "barelyswing-*.timer"}
+        ):
+            self.run_tool("routine_run", {"name": "barelyswing premarket"})
+            _, is_error = self.run_tool("routine_run", {"name": "briefing"})
+        self.assertEqual(self.started, ["barelyswing-premarket.service"])
+        self.assertTrue(is_error)
+
     def test_a_failed_start_reaches_the_brain(self) -> None:
         def boom(service: str) -> None:
             raise RuntimeError("systemctl: access denied")
 
         registry = ToolRegistry()
         CoreTools(
-            memory=self.memory,  # type: ignore[arg-type]
+            memory=self.memory,
             widgets=lambda: self.widgets,
             agents=lambda: self.agents,
             schedule=lambda: self.timers,
@@ -355,7 +428,7 @@ class StatusTests(Base):
 
         registry = ToolRegistry()
         CoreTools(
-            memory=self.memory,  # type: ignore[arg-type]
+            memory=self.memory,
             widgets=lambda: self.widgets,
             agents=lambda: self.agents,
             schedule=broken,

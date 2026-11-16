@@ -14,6 +14,8 @@ server.
 
 from __future__ import annotations
 
+import fnmatch
+import os
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -24,12 +26,15 @@ if TYPE_CHECKING:
     from orchestrator.memory.store import MemoryStore
     from orchestrator.tools import ToolRegistry
 
-# A new fact this close to a stored one is the same fact reworded.
-DUPLICATE_SIMILARITY = 0.95
 MAX_FACT_CHARS = 500
 WEATHER_STALE_MINUTES = 60
 DISK_WARN_PERCENT = 90.0
 TIMER_PREFIXES = ("jarvis-routine-", "jarvis-", "atlas-")
+# Timers routine_run may start. routines_list shows every timer the cockpit
+# does, but starting one by voice is limited to JARVIS's own routines and the
+# Atlas refresh: not trading jobs, not system housekeeping. Widen with
+# JARVIS_RUN_TIMERS (comma-separated globs).
+DEFAULT_RUN_TIMERS = "jarvis-routine-*.timer,jarvis-briefing.timer,atlas-*.timer"
 
 _NO_ARGS: dict[str, Any] = {
     "type": "object",
@@ -58,6 +63,15 @@ def _short_name(timer: str) -> str:
     return name.replace("-", " ")
 
 
+def run_globs() -> list[str]:
+    raw = os.environ.get("JARVIS_RUN_TIMERS", DEFAULT_RUN_TIMERS)
+    return [glob.strip() for glob in raw.split(",") if glob.strip()]
+
+
+def may_run(timer: str) -> bool:
+    return any(fnmatch.fnmatch(timer, glob) for glob in run_globs())
+
+
 class CoreTools:
     def __init__(
         self,
@@ -84,10 +98,9 @@ class CoreTools:
             raise CoreToolError("There is nothing to remember.")
         if len(fact) > MAX_FACT_CHARS:
             raise CoreToolError(f"Keep a fact under {MAX_FACT_CHARS} characters.")
-        nearest = self.memory.semantic.search_scored(fact, k=1)
-        if nearest and nearest[0]["similarity"] >= DUPLICATE_SIMILARITY:
-            return {"ok": True, "already_known": True, "fact": nearest[0]["text"]}
-        self.memory.remember_fact(fact, category="explicit")
+        existing = self.memory.remember_fact(fact, category="explicit")
+        if existing is not None:
+            return {"ok": True, "already_known": True, "fact": existing}
         return {"ok": True, "already_known": False, "fact": fact}
 
     def recall(self, query: str, limit: int = 5) -> dict[str, Any]:
@@ -166,6 +179,7 @@ class CoreTools:
                     "last_result": row.get("result") or None,
                     "running_now": row.get("service_state") == "active",
                     "enabled": row.get("enabled") == "enabled",
+                    "can_run_by_voice": may_run(str(row.get("timer"))),
                 }
             )
         return rows
@@ -196,6 +210,11 @@ class CoreTools:
                 f"{', '.join(row['name'] for row in matches)}. Ask which."
             )
         row = matches[0]
+        if not row["can_run_by_voice"]:
+            raise CoreToolError(
+                f"'{row['name']}' is not one I am allowed to start. Use the "
+                "cockpit's run-now button for it."
+            )
         if not row["service"]:
             raise CoreToolError(f"'{row['name']}' has no service to start.")
         if row["running_now"]:
@@ -331,7 +350,8 @@ class CoreTools:
             description=(
                 "Start a scheduled routine now, by name from routines_list. "
                 "Only when the user explicitly asks to run it: some routines "
-                "change code, open pull requests or spend API budget. It "
+                "change code, open pull requests or spend API budget. Only "
+                "routines marked can_run_by_voice may be started. It "
                 "starts in the background; use routines_list later for the "
                 "result."
             ),
