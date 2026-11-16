@@ -1,6 +1,8 @@
 """Unified memory interface across all memory types."""
 
+import logging
 import os
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -8,6 +10,25 @@ from .working import WorkingMemory
 from .semantic import SemanticMemory
 from .episodic import EpisodicMemory
 from .procedural import ProceduralMemory
+
+
+logger = logging.getLogger("jarvis.memory")
+
+# A new fact at least this similar to a stored one is the same fact reworded.
+DUPLICATE_SIMILARITY = 0.95
+
+_ARTICLES = re.compile(r"\b(?:the|a|an)\b")
+_NOT_WORD = re.compile(r"[^a-z0-9 ]+")
+
+
+def normalize_fact(text: str) -> str:
+    """Fold case, punctuation and articles, so trivial rewordings compare equal.
+
+    "User's test fact is purple" and "The user's test fact is purple." both
+    become "users test fact is purple".
+    """
+    folded = _NOT_WORD.sub("", text.lower().replace("-", " "))
+    return " ".join(_ARTICLES.sub(" ", folded).split())
 
 
 class MemoryStore:
@@ -41,9 +62,38 @@ class MemoryStore:
         self.working.add(user_input, response)
         self.episodic.log(user_input, response, timestamp, metadata)
 
-    def remember_fact(self, fact: str, category: str = "general"):
-        """Explicitly store a durable fact in semantic memory."""
+    def find_duplicate(self, fact: str) -> Optional[str]:
+        """The stored fact this one repeats, or None.
+
+        A duplicate is a stored fact that is the same text after
+        normalize_fact(), or at least DUPLICATE_SIMILARITY similar.
+        """
+        wanted = normalize_fact(fact)
+        for hit in self.semantic.search_scored(fact, k=3, record_access=False):
+            if (
+                hit["similarity"] >= DUPLICATE_SIMILARITY
+                or normalize_fact(str(hit["text"])) == wanted
+            ):
+                return str(hit["text"])
+        return None
+
+    def remember_fact(self, fact: str, category: str = "general") -> Optional[str]:
+        """Store a durable fact unless it repeats one already stored.
+
+        Returns the existing fact when it was a duplicate, else None. Every
+        writer goes through here, so the brain's automatic extraction cannot
+        re-add a fact the user just asked to have remembered.
+        """
+        try:
+            existing = self.find_duplicate(fact)
+        except Exception:
+            # A failed lookup must not cost the fact: store it, duplicate or not.
+            logger.warning("Duplicate check failed; storing anyway", exc_info=True)
+            existing = None
+        if existing is not None:
+            return existing
         self.semantic.add(fact, metadata={"category": category})
+        return None
 
     def _format_context(
         self,
