@@ -106,7 +106,8 @@ class ToolRegistry:
         # the model not to supply the absolute figures Atlas withholds.
         # Web content is the one input written by strangers, and the brain
         # now holds tools with side effects, so it is marked as untrusted.
-        if name.startswith(("friday_", "atlas_", "web_")):
+        # Mail is the same: anyone can write to the shared mailbox.
+        if name.startswith(("friday_", "atlas_", "web_", "email_")):
             return (ground_tool_result(name, result), False)
 
         return (result, False)
