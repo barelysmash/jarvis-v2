@@ -192,6 +192,8 @@ class AtlasBoundaryTests(unittest.TestCase):
         self.assertIn("belongs to the two periods it compares", rendered)
         self.assertIn("nights_missing and nights_in_review", rendered)
         self.assertIn("do not claim the period is complete", rendered)
+        self.assertIn("nights_partial", rendered)
+        self.assertIn("net sales and voids only", rendered)
         self.assertIn("'changes': []", rendered)
 
     def test_boundary_is_not_applied_to_other_tools(self):
