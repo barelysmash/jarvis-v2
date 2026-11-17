@@ -9,15 +9,49 @@ Register with TavilyAdapter().register(tools) when TAVILY_API_KEY is set.
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
-from typing import Optional
+from typing import Any, Optional
+from urllib.parse import urlsplit
 
 import requests
 
 logger = logging.getLogger(__name__)
 
 TAVILY_ENDPOINT = "https://api.tavily.com/search"
+TAVILY_EXTRACT_ENDPOINT = "https://api.tavily.com/extract"
+
+# One page is capped so a long article cannot crowd out the conversation.
+MAX_PAGE_CHARS = 12_000
+
+
+class WebReadError(RuntimeError):
+    """A page could not be read. The message is safe to show the user."""
+
+
+def check_public_url(url: str) -> str:
+    """Return the URL if it is a public http(s) address, else raise.
+
+    Pages are fetched by Tavily, not from this host, so a private address
+    could not be reached anyway. Refusing here gives a clear answer instead
+    of a confusing fetch failure, and keeps tailnet hostnames out of a
+    third party's logs.
+    """
+    url = str(url).strip()
+    parts = urlsplit(url)
+    host = (parts.hostname or "").lower()
+    if parts.scheme not in ("http", "https") or not host:
+        raise WebReadError("Give a full web address starting with http:// or https://.")
+    private = host == "localhost" or host.endswith((".local", ".internal", ".ts.net"))
+    try:
+        address = ipaddress.ip_address(host)
+        private = private or not address.is_global
+    except ValueError:
+        private = private or "." not in host
+    if private:
+        raise WebReadError("I can only read pages on the public web.")
+    return url
 
 
 class TavilyAdapter:
@@ -102,8 +136,88 @@ class TavilyAdapter:
 
         return "\n".join(parts)
 
+    def _extract(self, url: str, depth: str) -> dict[str, Any]:
+        try:
+            response = requests.post(
+                TAVILY_EXTRACT_ENDPOINT,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                json={
+                    "urls": [url],
+                    "extract_depth": depth,
+                    "format": "markdown",
+                    "timeout": 20,
+                },
+                timeout=30,
+            )
+        except requests.RequestException as exc:
+            raise WebReadError(f"The page reader could not be reached: {exc}") from None
+        if response.status_code in (401, 403):
+            raise WebReadError("The page reader rejected the stored API key.")
+        if response.status_code == 429:
+            raise WebReadError("The page reader is rate-limited; try again shortly.")
+        if response.status_code != 200:
+            raise WebReadError(
+                f"The page reader returned HTTP {response.status_code}."
+            )
+        try:
+            data = response.json()
+        except ValueError:
+            raise WebReadError("The page reader returned an unreadable reply.") from None
+        return data if isinstance(data, dict) else {}
+
+    def read(self, url: str) -> dict[str, Any]:
+        """Fetch one public page as text. Raises WebReadError when it cannot."""
+        url = check_public_url(url)
+        content = ""
+        title = None
+        # Plain fetch first; pages that need JavaScript get one deeper retry.
+        for depth in ("basic", "advanced"):
+            data = self._extract(url, depth)
+            results = data.get("results") or []
+            first = results[0] if results and isinstance(results[0], dict) else {}
+            content = str(first.get("raw_content") or "").strip()
+            title = first.get("title") or None
+            if content:
+                break
+        if not content:
+            raise WebReadError(
+                "That page returned no readable text. It may need a login, "
+                "block automated readers, or not exist."
+            )
+        truncated = len(content) > MAX_PAGE_CHARS
+        if truncated:
+            content = content[:MAX_PAGE_CHARS].rstrip() + "\n[... page continues]"
+        return {
+            "url": url,
+            "title": title,
+            "truncated": truncated,
+            "content": content,
+        }
+
     def register(self, tools) -> None:
-        """Register web_search as a tool on the given ToolRegistry."""
+        """Register web_search and web_read on the given ToolRegistry."""
+        tools.register(
+            name="web_read",
+            description=(
+                "Read one public web page and return its text. Use when the "
+                "user gives a URL, or after web_search when a result's "
+                "snippet is not enough to answer. One page per call, and "
+                "long pages are cut off. Cannot read pages behind a login "
+                "or on a private network."
+            ),
+            schema={
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Full address, starting with https://",
+                    },
+                },
+                "required": ["url"],
+                "additionalProperties": False,
+            },
+            handler=lambda url: self.read(url),
+        )
         tools.register(
             name="web_search",
             description=(
