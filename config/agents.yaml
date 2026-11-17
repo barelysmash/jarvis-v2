@@ -17,11 +17,22 @@
 agents:
 
   tavily:
-    description: Web search via the Tavily API.
+    description: Web search and single-page reading via the Tavily API.
     transport: adapter
     module: tools.integrations.web_search
     class: TavilyAdapter
     requires_env: [TAVILY_API_KEY]
+
+  taxdesk:
+    description: >
+      Taxdesk — Texas Comptroller sales tax allocations and TABC
+      mixed-beverage receipts for Austin. Read-only peer service on the
+      tailnet (port 8770). Public datasets only: the adapter never calls
+      Taxdesk's private product-mix routes.
+    transport: adapter
+    module: tools.integrations.taxdesk
+    class: TaxdeskAdapter
+    requires_env: [TAXDESK_BASE_URL]
 
   reminders:
     description: >

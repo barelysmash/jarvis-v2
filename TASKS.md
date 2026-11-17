@@ -66,7 +66,10 @@ Operational Intelligence      Trading Intelligence
         and the voice client yet)
       - [x] Memory, routines, weather and system status as callable tools —
         DONE 2026-11-15: seven built-in tools in `tools/core_tools.py`
-      - [ ] Read a web page; Taxdesk adapter
+      - [x] Read a web page — DONE 2026-11-16: `web_read` (Tavily extract), with
+        web content marked untrusted in grounding.py
+      - [x] Taxdesk adapter — DONE 2026-11-16: six `taxdesk_` tools, public
+        Comptroller data only (never the private `/api/mix/` routes)
 - [ ] **Loop automation** — Jarvis runs tasks unattended:
       - Session isolation per routine run (fresh conversation, never the shared
         singleton — non-negotiable for unattended operation). Shell and goal
