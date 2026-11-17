@@ -149,7 +149,8 @@ class AtlasAdapter:
                 "dates it compares month to date against the same days of the "
                 "prior month. With start_date and end_date only, it compares "
                 "against the equal-length window just before. Each period "
-                "also reports how many nights are missing or in review. "
+                "also reports how many nights are missing, in review, or "
+                "partial (sales and voids only). "
                 "Read-only."
             ),
             schema={
