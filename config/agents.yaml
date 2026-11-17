@@ -34,6 +34,19 @@ agents:
     class: TaxdeskAdapter
     requires_env: [TAXDESK_BASE_URL]
 
+  mailbox:
+    description: >
+      Mailbox — read-only access to guildensternai@gmail.com, the address
+      shared by the agents on guildenstern, and to no other account (the
+      adapter checks the token's account before reading). Search and read
+      only. Restaurant nightly reports are excluded; those figures go
+      through Atlas. Results pass through the email source boundary in
+      grounding.py.
+    transport: adapter
+    module: tools.integrations.gmail_inbox
+    class: GmailAdapter
+    requires_env: [EMAIL_TOKEN_FILE]
+
   reminders:
     description: >
       Reminders and timers. Stored in the JARVIS data directory; the API

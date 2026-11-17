@@ -68,6 +68,10 @@ Operational Intelligence      Trading Intelligence
         DONE 2026-11-15: seven built-in tools in `tools/core_tools.py`
       - [x] Read a web page — DONE 2026-11-16: `web_read` (Tavily extract), with
         web content marked untrusted in grounding.py
+      - [x] Mailbox, read-only — DONE 2026-11-17: `email_search` and
+        `email_read` over guildensternai@gmail.com only (the agents' shared
+        address; account checked in code), nightly reports excluded, mail
+        marked untrusted in grounding.py
       - [x] Taxdesk adapter — DONE 2026-11-16: six `taxdesk_` tools, public
         Comptroller data only (never the private `/api/mix/` routes)
 - [ ] **Loop automation** — Jarvis runs tasks unattended:
