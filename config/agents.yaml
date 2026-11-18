@@ -47,6 +47,18 @@ agents:
     class: GmailAdapter
     requires_env: [EMAIL_TOKEN_FILE]
 
+  phone:
+    description: >
+      Phone — pushes a short notification to the user's phone through the
+      ntfy server on guildenstern. The tool is for explicit requests only
+      ("send that to my phone"). Reminders, timers, Atlas alerts and the
+      briefing-ready notice use the same channel directly, without the
+      model. Refuses the public ntfy.sh service.
+    transport: adapter
+    module: tools.integrations.phone
+    class: PhoneNotifier
+    requires_env: [NTFY_BASE_URL, NTFY_TOPIC]
+
   reminders:
     description: >
       Reminders and timers. Stored in the JARVIS data directory; the API
