@@ -137,7 +137,32 @@ class AtlasAdapter:
     def freshness(self) -> Any:
         return self._request("GET", "/v1/freshness")
 
+    def decisions(self) -> Any:
+        return self._request("GET", "/v1/decisions")
+
     def register(self, tools: ToolRegistry) -> None:
+        tools.register(
+            name="atlas_decisions",
+            description=(
+                "Ask Atlas for its current Decisions about the restaurant: "
+                "where a weekly metric is moving against or with one of the "
+                "owner's goals, with Atlas's recommended next step. Use it "
+                "for 'what does Atlas recommend', 'anything I should act "
+                "on at the restaurant', or 'any decisions from Atlas'. Each "
+                "Decision has a priority, a confidence, the direction and "
+                "percent change behind it, and how many days ago it first "
+                "appeared. RELATIVE figures only. Decisions are Atlas's "
+                "recommendations awaiting the user's approval; nothing is "
+                "executed. Read-only."
+            ),
+            schema={
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+            handler=lambda: self.decisions(),
+        )
+
         tools.register(
             name="atlas_operating_summary",
             description=(

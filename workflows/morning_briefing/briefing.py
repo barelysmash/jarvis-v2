@@ -71,6 +71,13 @@ class MorningBriefingWorkflow(Workflow):
             if alerts:
                 briefing_text += "\n\n" + " ".join(alerts)
 
+            # New high-priority Atlas Decisions, verbatim for the same reason.
+            # Kept apart from alerts: alerts are pushed to the phone, these
+            # are not.
+            decision_lines = analysis.get("decision_lines") or []
+            if decision_lines:
+                briefing_text += "\n\n" + " ".join(decision_lines)
+
             # 5. Deliver
             if speak and "speak" in self.tools._tools:
                 self.tools.execute("speak", {"text": briefing_text})
@@ -89,6 +96,7 @@ class MorningBriefingWorkflow(Workflow):
                 ),
                 "conflicts_flagged": len(analysis.get("conflicts", [])),
                 "alerts": list(alerts),
+                "decision_lines": list(decision_lines),
             }
 
             self.log_execution(result)

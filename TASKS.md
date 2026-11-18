@@ -50,9 +50,12 @@ Operational Intelligence      Trading Intelligence
       (star-pattern rule: no new domain skills inside Jarvis itself)
 - [x] Atlas staleness alarm in the morning briefing — DONE 2026-11-11
       (alarm past `ATLAS_STALE_DAYS`, default 3, or when Atlas does not answer)
-- [ ] Atlas: emit JAM Decisions from the Fonda ledger and expose them (the
-      peer API serves period comparisons only; atlas-core's decision engine is
-      not run on nightly data yet)
+- [ ] Atlas: emit JAM Decisions from the Fonda ledger and expose them —
+      code DONE 2026-11-18: Atlas reasons over the nightly ledger against a
+      private goals file and serves `GET /v1/decisions` (relative only);
+      JARVIS has `atlas_decisions`, and the briefing states new high-priority
+      Decisions verbatim. Still to do: apply the Atlas patch and write
+      goals.json on guildenstern
 - [ ] Task-specific agents under JARVIS as orchestrator (beyond the five above)
 - [ ] Consigliere: an advisor for JARVIS that runs on a later model
 - [ ] Expand tools

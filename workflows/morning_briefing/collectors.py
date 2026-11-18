@@ -41,6 +41,7 @@ class BriefingCollectors:
             self._tracked_items(),
             self._smart_home_status(),
             self._atlas_freshness(),
+            self._atlas_decisions(),
             return_exceptions=True,
         )
 
@@ -53,6 +54,7 @@ class BriefingCollectors:
             "tracked",
             "home",
             "atlas",
+            "atlas_decisions",
         ]
         return {
             k: (v if not isinstance(v, Exception) else None)
@@ -178,6 +180,24 @@ class BriefingCollectors:
             self.tools.execute, "home_status", {}
         )
         return _unwrap(ret)
+
+    async def _atlas_decisions(self):
+        """Atlas's current Decisions, structured, for the briefing lines.
+
+        None when Atlas is not registered or does not answer: a silent Atlas
+        is already reported by the freshness alarm, so it is not repeated
+        here. Calls the handler directly, for the same reason as below.
+        """
+        entry = self.tools._tools.get("atlas_decisions")
+        if entry is None:
+            return None
+        try:
+            result = await asyncio.to_thread(entry["handler"])
+        except Exception as exc:
+            logger.warning("atlas_decisions failed: %s", exc)
+            return None
+        data = result.get("data") if isinstance(result, dict) else None
+        return data if isinstance(data, dict) else None
 
     async def _atlas_freshness(self):
         """How current Atlas's restaurant ledger is, for the staleness alarm.
