@@ -5,7 +5,8 @@ claimed in the database first (so it can never fire twice), then announced:
 
 * ``announce`` on the WebSocket bus, which the voice client speaks;
 * a ``conversation`` line, which the HUD shows like any JARVIS reply;
-* an event-log entry, which the cockpit lists.
+* an event-log entry, which the cockpit lists;
+* a push to the phone, when phone notifications are configured.
 
 If nothing is connected when it fires, the reminder is kept as unseen and
 handed to the next client that connects, so it is late instead of lost.
@@ -27,6 +28,12 @@ logger = logging.getLogger(__name__)
 POLL_SECONDS = 1.0
 
 Publish = Callable[[str, Any], Awaitable[None]]
+# Sends one line to the phone; returns whether it went. Must not raise.
+Notify = Callable[[str, str], bool]
+
+
+def phone_title(reminder: dict[str, Any]) -> str:
+    return "Timer" if reminder["kind"] == "timer" else "Reminder"
 
 
 def announce_events(reminder: dict[str, Any], text: str) -> list[tuple[str, Any]]:
@@ -45,6 +52,7 @@ async def fire_due(
     publish: Publish,
     subscriber_count: Callable[[], int],
     now: datetime | None = None,
+    notify: Notify | None = None,
 ) -> list[dict[str, Any]]:
     """Fire everything due at ``now``. Returns the reminders announced."""
     now = now or datetime.now(UTC)
@@ -59,6 +67,13 @@ async def fire_due(
         text = announcement(reminder, now)
         for event_type, data in announce_events(reminder, text):
             await publish(event_type, data)
+        # The phone is told every time, heard or not: the point of a push is
+        # that it reaches the user away from the desk.
+        pushed = (
+            await asyncio.to_thread(notify, text, phone_title(reminder))
+            if notify is not None
+            else None
+        )
         event_log.emit(
             "reminders",
             "agent",
@@ -68,7 +83,7 @@ async def fire_due(
                 "severity": "notice",
                 "summary": text,
                 "via": "scheduler",
-                "data": {"id": reminder["id"], "heard": heard},
+                "data": {"id": reminder["id"], "heard": heard, "phone": pushed},
             },
         )
         fired.append(reminder)
@@ -100,11 +115,16 @@ async def run_scheduler(
     store: ReminderStore,
     publish: Publish,
     subscriber_count: Callable[[], int],
+    notify: Notify | None = None,
 ) -> None:
-    logger.info("Reminder scheduler started (%s)", store.path)
+    logger.info(
+        "Reminder scheduler started (%s, phone=%s)",
+        store.path,
+        "on" if notify is not None else "off",
+    )
     while True:
         try:
-            await fire_due(store, publish, subscriber_count)
+            await fire_due(store, publish, subscriber_count, notify=notify)
         except asyncio.CancelledError:
             raise
         except Exception:

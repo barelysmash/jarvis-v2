@@ -62,8 +62,10 @@ Operational Intelligence      Trading Intelligence
       - [x] Reminders and timers — DONE 2026-11-13: three `reminder_` tools, a
         scheduler in the API server, HUD + spoken delivery (voice client
         listens on /ws), held for the next client when none is connected
-      - [ ] Reminders: reach the phone (nothing is delivered away from the HUD
-        and the voice client yet)
+      - [ ] Phone notifications — code DONE 2026-11-17 (`phone_notify`, plus
+        direct pushes for reminders, timers, Atlas alerts and a
+        briefing-ready notice; own ntfy server only). Still to do: install
+        ntfy on guildenstern and set NTFY_BASE_URL / NTFY_TOPIC / NTFY_TOKEN
       - [x] Memory, routines, weather and system status as callable tools —
         DONE 2026-11-15: seven built-in tools in `tools/core_tools.py`
       - [x] Read a web page — DONE 2026-11-16: `web_read` (Tavily extract), with

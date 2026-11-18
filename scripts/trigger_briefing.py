@@ -19,6 +19,26 @@ from orchestrator.memory.store import MemoryStore
 from orchestrator.tools import ToolRegistry
 from workflows.morning_briefing.briefing import MorningBriefingWorkflow
 
+BRIEFING_READY = "Your morning briefing is ready."
+
+
+def push_briefing_to_phone(result, notifier) -> int:
+    """Tell the phone the briefing ran, and push each alert on its own.
+
+    The briefing text itself is not sent: it is long, and it is spoken and
+    shown already. Alerts are sent verbatim, as they are in the briefing.
+    Returns how many notifications went out.
+    """
+    if notifier is None:
+        return 0
+    sent = 0
+    if notifier.try_send(BRIEFING_READY, title="Morning briefing", priority="low"):
+        sent += 1
+    for alert in result.get("alerts") or []:
+        if notifier.try_send(str(alert), title="Atlas alert", priority="high"):
+            sent += 1
+    return sent
+
 
 def main():
     load_dotenv()
@@ -82,6 +102,12 @@ def main():
         if result.get("status") != "success":
             raise RuntimeError(f"Briefing failed: {result.get('error')}")
         rec["summary"] = str(result.get("output", ""))[:400]
+
+    from tools.integrations.phone import notifier_from_env
+
+    pushed = push_briefing_to_phone(result, notifier_from_env())
+    if pushed:
+        print(f"[briefing] {pushed} phone notification(s) sent")
 
     print(result["output"])
     print(

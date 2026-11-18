@@ -17,7 +17,7 @@ from orchestrator.tools import ToolRegistry
 
 from .events import bus, emit_jarvis_speech, emit_state, emit_user_speech
 from orchestrator.reminders import get_store as get_reminder_store
-from server.reminder_scheduler import run_scheduler, unseen_events
+from server.reminder_scheduler import Notify, run_scheduler, unseen_events
 from server.spotify_client import spotify_client
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,16 @@ if not logging.getLogger().handlers:
 brain: Optional[JarvisBrain] = None
 memory: Optional[MemoryStore] = None
 tools: Optional[ToolRegistry] = None
+
+
+def _phone_notify() -> Notify | None:
+    """The reminder scheduler's phone hook, or None when it is not set up."""
+    from tools.integrations.phone import notifier_from_env
+
+    notifier = notifier_from_env()
+    if notifier is None:
+        return None
+    return lambda text, title: notifier.try_send(text, title=title, priority="high")
 
 
 @asynccontextmanager
@@ -109,7 +119,12 @@ async def lifespan(app: FastAPI):
     heatmap_task = asyncio.create_task(_heatmap_publisher())
     spotify_task = asyncio.create_task(_spotify_publisher())
     reminder_task = asyncio.create_task(
-        run_scheduler(get_reminder_store(), bus.publish, lambda: len(bus.subscribers))
+        run_scheduler(
+            get_reminder_store(),
+            bus.publish,
+            lambda: len(bus.subscribers),
+            notify=_phone_notify(),
+        )
     )
 
     yield
