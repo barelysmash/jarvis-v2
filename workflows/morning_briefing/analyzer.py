@@ -47,6 +47,78 @@ def atlas_alerts(atlas: object, stale_days: int | None = None) -> list[str]:
     ]
 
 
+# A Decision counts as new for this many days after Atlas first emitted it.
+# Two, so one that appears after a Saturday is still mentioned on Monday.
+DECISION_NEW_DAYS = 2
+MAX_DECISION_LINES = 3
+
+_URGENT = ("critical", "high")
+
+
+def _moved(evidence: object) -> str:
+    """'net sales fell 7.8%' from the week-over-week citation, else ''."""
+    if not isinstance(evidence, list):
+        return ""
+    first = next(
+        (
+            item
+            for item in evidence
+            if isinstance(item, dict)
+            and str(item.get("basis", "")).startswith("latest full week")
+        ),
+        None,
+    )
+    if first is None:
+        return ""
+    change = first.get("change_pct")
+    metric = first.get("metric")
+    if isinstance(change, bool) or not isinstance(change, int | float) or not metric:
+        return ""
+    if change == 0:
+        return f"{metric} was flat"
+    verb = "rose" if change > 0 else "fell"
+    return f"{metric} {verb} {abs(change):g}%"
+
+
+def atlas_decision_lines(decisions: object) -> list[str]:
+    """Briefing lines for new, high-priority Atlas Decisions. Often empty.
+
+    Deterministic, like the alarm: appended verbatim so the model can neither
+    drop one nor dress it up. Only what Atlas sent is used, and Atlas sends
+    relative figures only. A Decision is mentioned while it is new and then
+    left to be asked about, so the briefing does not repeat itself all week.
+    """
+    if not isinstance(decisions, dict) or decisions.get("status") != "ok":
+        return []
+    items = decisions.get("decisions")
+    if not isinstance(items, list):
+        return []
+
+    fresh = [
+        item
+        for item in items
+        if isinstance(item, dict)
+        and item.get("priority") in _URGENT
+        and isinstance(item.get("days_since_first_emitted"), int)
+        and 0 <= item["days_since_first_emitted"] <= DECISION_NEW_DAYS
+        and item.get("summary")
+    ]
+    lines: list[str] = []
+    for item in fresh[:MAX_DECISION_LINES]:
+        line = f"Atlas decision, {item['priority']} priority: {item['summary']}"
+        moved = _moved(item.get("evidence"))
+        if moved:
+            line += f" In the latest full week, {moved} against the week before."
+        lines.append(line)
+    extra = len(fresh) - len(lines)
+    if extra > 0:
+        noun = "Decision" if extra == 1 else "Decisions"
+        lines.append(
+            f"Atlas has {extra} more new high-priority {noun}; ask me for them."
+        )
+    return lines
+
+
 class BriefingAnalyzer:
     """Identifies anomalies, conflicts, and callbacks worth surfacing."""
 
@@ -61,6 +133,7 @@ class BriefingAnalyzer:
             "anomalies": self._find_anomalies(collected),
             "priorities": self._rank_priorities(collected),
             "alerts": atlas_alerts(collected.get("atlas")),
+            "decision_lines": atlas_decision_lines(collected.get("atlas_decisions")),
         }
 
     def _find_conflicts(self, calendar) -> list:

@@ -26,7 +26,7 @@ class AtlasAdapterTests(unittest.TestCase):
             client=client,
         )
 
-    def test_registers_two_read_only_tools(self):
+    def test_registers_three_read_only_tools(self):
         adapter = self.make_adapter(
             lambda request: httpx.Response(200, json={"data": {}})
         )
@@ -35,7 +35,33 @@ class AtlasAdapterTests(unittest.TestCase):
         adapter.register(registry)
 
         names = {name for name in registry.names() if name.startswith("atlas_")}
-        self.assertEqual(names, {"atlas_operating_summary", "atlas_freshness"})
+        self.assertEqual(
+            names,
+            {"atlas_operating_summary", "atlas_freshness", "atlas_decisions"},
+        )
+
+    def test_decisions_is_a_get_with_no_arguments(self):
+        captured = {}
+
+        def handler(request):
+            captured["method"] = request.method
+            captured["path"] = request.url.path
+            captured["body"] = request.content
+            return httpx.Response(
+                200,
+                json={"request_id": "d-1", "data": {"status": "ok", "count": 0}},
+            )
+
+        adapter = self.make_adapter(handler)
+        registry = ToolRegistry()
+        adapter.register(registry)
+        result, is_error = registry.execute("atlas_decisions", {})
+
+        self.assertFalse(is_error)
+        self.assertEqual(captured["method"], "GET")
+        self.assertEqual(captured["path"], "/v1/decisions")
+        self.assertIn(captured["body"], (b"", b"null"))
+        self.assertIn("SOURCE BOUNDARY — ATLAS", result)
 
     def test_operating_summary_posts_only_the_fields_given(self):
         captured = {}
@@ -183,6 +209,18 @@ class AtlasBoundaryTests(unittest.TestCase):
         self.assertIn("small, large, low or high base", rendered)
         self.assertIn("Report what moved, not why", rendered)
         self.assertIn("Do not offer nightly detail", rendered)
+
+    def test_boundary_covers_decisions(self):
+        rendered = " ".join(
+            ground_tool_result("atlas_decisions", {"decisions": []}).split()
+        )
+
+        self.assertIn("exactly three tools", rendered)
+        self.assertIn("they are Atlas's recommendations, not yours", rendered)
+        self.assertIn("awaits the user's approval", rendered)
+        self.assertIn("do not act on one yourself", rendered)
+        self.assertIn("ignores holidays, weather and events", rendered)
+        self.assertIn("not_configured", rendered)
 
     def test_boundary_covers_margin_cross_period_links_and_coverage(self):
         rendered = ground_tool_result("atlas_operating_summary", {"changes": []})
