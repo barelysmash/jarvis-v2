@@ -114,6 +114,36 @@ class AtlasDecisionLineTests(unittest.TestCase):
         [line] = atlas_decision_lines(payload(item))
         self.assertIn("labor cost percent rose 4%", line)
 
+    def test_a_skipped_week_is_named_instead_of_called_the_week_before(self):
+        item = decision()
+        item["evidence"][1].update(
+            {
+                "basis": "latest full week against an earlier week, "
+                "not the week before",
+                "week_of": "2026-11-09",
+                "compared_with_week_of": "2026-10-26",
+                "weeks_skipped_between": 1,
+            }
+        )
+        [line] = atlas_decision_lines(payload(item))
+        self.assertTrue(
+            line.endswith(
+                "In the latest full week, net sales fell 7.8% against the "
+                "week of October 26."
+            )
+        )
+        self.assertNotIn("the week before", line)
+
+    def test_a_skipped_week_with_no_usable_date_says_only_the_summary(self):
+        item = decision()
+        item["evidence"][1].update(
+            {"weeks_skipped_between": 1, "compared_with_week_of": None}
+        )
+        self.assertEqual(
+            atlas_decision_lines(payload(item)),
+            ["Atlas decision, high priority: Intervene on net sales."],
+        )
+
     def test_only_the_week_over_week_citation_is_quoted(self):
         [line] = atlas_decision_lines(payload(decision()))
         self.assertNotIn("13.6", line)
