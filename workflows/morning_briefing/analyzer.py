@@ -55,8 +55,22 @@ MAX_DECISION_LINES = 3
 _URGENT = ("critical", "high")
 
 
+def _week_named(value: object) -> str:
+    """'the week of November 2' from an ISO date, or '' when unusable."""
+    try:
+        day = date.fromisoformat(str(value))
+    except ValueError:
+        return ""
+    return f"the week of {day.strftime('%B')} {day.day}"
+
+
 def _moved(evidence: object) -> str:
-    """'net sales fell 7.8%' from the week-over-week citation, else ''."""
+    """One sentence from the week-over-week citation, or '' when unusable.
+
+    'In the latest full week, net sales fell 7.8% against the week before.'
+    When Atlas skipped a week (one with a missing night) the comparison is
+    with an earlier week, and the sentence names that week instead.
+    """
     if not isinstance(evidence, list):
         return ""
     first = next(
@@ -75,9 +89,16 @@ def _moved(evidence: object) -> str:
     if isinstance(change, bool) or not isinstance(change, int | float) or not metric:
         return ""
     if change == 0:
-        return f"{metric} was flat"
-    verb = "rose" if change > 0 else "fell"
-    return f"{metric} {verb} {abs(change):g}%"
+        what = f"{metric} was flat"
+    else:
+        what = f"{metric} {'rose' if change > 0 else 'fell'} {abs(change):g}%"
+
+    against = "the week before"
+    if first.get("weeks_skipped_between"):
+        against = _week_named(first.get("compared_with_week_of"))
+        if not against:
+            return ""
+    return f" In the latest full week, {what} against {against}."
 
 
 def atlas_decision_lines(decisions: object) -> list[str]:
@@ -106,9 +127,7 @@ def atlas_decision_lines(decisions: object) -> list[str]:
     lines: list[str] = []
     for item in fresh[:MAX_DECISION_LINES]:
         line = f"Atlas decision, {item['priority']} priority: {item['summary']}"
-        moved = _moved(item.get("evidence"))
-        if moved:
-            line += f" In the latest full week, {moved} against the week before."
+        line += _moved(item.get("evidence"))
         lines.append(line)
     extra = len(fresh) - len(lines)
     if extra > 0:

@@ -221,6 +221,8 @@ class AtlasBoundaryTests(unittest.TestCase):
         self.assertIn("do not act on one yourself", rendered)
         self.assertIn("ignores holidays, weather and events", rendered)
         self.assertIn("not_configured", rendered)
+        self.assertIn("do not call it 'the week before'", rendered)
+        self.assertIn("different pairs of weeks are separate findings", rendered)
 
     def test_boundary_covers_margin_cross_period_links_and_coverage(self):
         rendered = ground_tool_result("atlas_operating_summary", {"changes": []})
